@@ -1,0 +1,54 @@
+services:
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: fyp-ml-service
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ml/.env
+    environment:
+      - APP_ENV=production
+      - DEBUG=False
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fyp-backend
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    extra_hosts:
+      - "db.oyoktwoaqemssdqitggb.supabase.co:65.0.195.55"
+    ports:
+      - "8081:8081"
+    environment:
+      - AI_ML_SERVICE_URL=http://ml:8000
+    depends_on:
+      ml:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fyp-frontend
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: fyp-network

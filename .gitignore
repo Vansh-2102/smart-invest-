@@ -1,0 +1,42 @@
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.tmp
+
+# Java / Maven (Backend)
+backend/target/
+backend/.mvn/
+backend/*.jar
+backend/*.war
+
+# Node / React (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/package-lock.json
+
+# Python / ML
+ml/__pycache__/
+ml/*/__pycache__/
+ml/*/*/__pycache__/
+ml/.venv/
+ml/venv/
+ml/env/
+ml/.cache/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.joblib
+*.zip
+ml/data/*.zip
+ml/data/*/*.zip
+
+# Environment Variables & Secrets
+.env
+ml/.env
+backend/.env
+frontend/.env

@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans antialiased;
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+}
+
+@layer components {
+  /* Glass Card */
+  .glass-card {
+    @apply bg-gray-900/60 backdrop-blur-md border border-gray-700/50 rounded-2xl;
+  }
+
+  .glass-card-light {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+  }
+
+  /* Gradient Text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent;
+  }
+
+  .gradient-text-gold {
+    @apply bg-gradient-to-r from-gold-400 to-yellow-300 bg-clip-text text-transparent;
+  }
+
+  /* Glow Effects */
+  .glow-emerald {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.25), 0 0 40px rgba(16, 185, 129, 0.1);
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.25), 0 0 40px rgba(245, 158, 11, 0.1);
+  }
+
+  /* Input Styles */
+  .form-input {
+    @apply w-full bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3
+           text-gray-100 placeholder-gray-500 
+           focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500
+           transition-all duration-200;
+  }
+
+  .form-input-error {
+    @apply border-red-500 focus:ring-red-500/50 focus:border-red-500;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-gray-300 mb-1.5;
+  }
+
+  /* Sidebar Nav Item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400
+           hover:text-emerald-400 hover:bg-emerald-500/10
+           transition-all duration-200 cursor-pointer text-sm font-medium;
+  }
+
+  .nav-item-active {
+    @apply text-emerald-400 bg-emerald-500/15 border border-emerald-500/20;
+  }
+
+  /* Stat Card */
+  .stat-card {
+    @apply glass-card p-5 flex flex-col gap-1;
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500
+           text-white font-semibold px-6 py-3 rounded-xl
+           transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
+           shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600
+           text-gray-200 font-semibold px-6 py-3 rounded-xl
+           transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+
+  .btn-ghost {
+    @apply text-gray-400 hover:text-gray-200 hover:bg-gray-800/50
+           font-medium px-4 py-2 rounded-lg transition-all duration-200;
+  }
+
+  .btn-danger {
+    @apply bg-red-600/20 hover:bg-red-600/30 border border-red-500/30
+           text-red-400 font-semibold px-6 py-3 rounded-xl
+           transition-all duration-200;
+  }
+
+  /* Risk Level Colors */
+  .risk-low {
+    @apply text-emerald-400 bg-emerald-500/10 border-emerald-500/30;
+  }
+  .risk-medium {
+    @apply text-gold-400 bg-gold-500/10 border-gold-500/30;
+  }
+  .risk-high {
+    @apply text-red-400 bg-red-500/10 border-red-500/30;
+  }
+
+  /* Section header */
+  .section-title {
+    @apply text-xl font-bold text-white mb-1;
+  }
+  .section-subtitle {
+    @apply text-sm text-gray-400;
+  }
+
+  /* Table */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table th {
+    @apply text-left text-xs font-semibold text-gray-500 uppercase tracking-wider py-3 px-4 border-b border-gray-800;
+  }
+  .data-table td {
+    @apply py-3 px-4 border-b border-gray-800/50 text-gray-300;
+  }
+  .data-table tr:hover td {
+    @apply bg-gray-800/30;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animation-delay-100 { animation-delay: 0.1s; }
+  .animation-delay-200 { animation-delay: 0.2s; }
+  .animation-delay-300 { animation-delay: 0.3s; }
+}
