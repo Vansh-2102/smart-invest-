@@ -1,10 +1,13 @@
 // Semi-circular risk gauge using SVG
 
 const RISK_CONFIG = {
-  LOW:       { label: 'Low',       color: '#10B981', angle: 30,   score: 25  },
-  MEDIUM:    { label: 'Medium',    color: '#F59E0B', angle: 90,   score: 50  },
-  HIGH:      { label: 'High',      color: '#F97316', angle: 150,  score: 75  },
-  VERY_HIGH: { label: 'Very High', color: '#EF4444', angle: 170,  score: 95  },
+  LOW:          { label: 'Low',          color: '#10B981', angle: 30,  score: 25 },
+  CONSERVATIVE: { label: 'Conservative', color: '#10B981', angle: 30,  score: 25 },
+  MEDIUM:       { label: 'Medium',       color: '#F59E0B', angle: 90,  score: 50 },
+  MODERATE:     { label: 'Moderate',     color: '#F59E0B', angle: 90,  score: 50 },
+  HIGH:         { label: 'High',         color: '#F97316', angle: 150, score: 75 },
+  AGGRESSIVE:   { label: 'Aggressive',   color: '#EF4444', angle: 170, score: 95 },
+  VERY_HIGH:    { label: 'Very High',    color: '#EF4444', angle: 170, score: 95 },
 };
 
 function polarToCartesian(cx, cy, r, angleDeg) {

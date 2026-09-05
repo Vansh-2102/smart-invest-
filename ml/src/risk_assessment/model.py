@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
 import joblib
 import os
@@ -13,6 +13,8 @@ class RiskAssessmentModel:
         self.model = None
         self.scaler = StandardScaler()
         self.label_encoders = {}
+        self.target_encoder = LabelEncoder()
+        self.target_encoder.classes_ = np.array(['aggressive', 'conservative', 'moderate'])
         self.feature_names = [
             'age', 'income', 'investment_experience', 
             'risk_tolerance', 'investment_goal', 
@@ -23,20 +25,15 @@ class RiskAssessmentModel:
             self.load_model(model_path)
     
     def load_real_data(self, csv_path: str = None):
-        """
-        Load real dataset for risk assessment.
-        Expected CSV columns: age, income, investment_experience, risk_tolerance, investment_goal, time_horizon, debt_to_income, risk_level
-        """
         if csv_path and os.path.exists(csv_path):
             return pd.read_csv(csv_path)
         else:
-            print("Real dataset not found, using synthetic data")
+            print("Real dataset not found, generating comprehensive financial synthetic data")
             return self.create_sample_data()
     
-    def create_sample_data(self, n_samples: int = 1000):
+    def create_sample_data(self, n_samples: int = 5000):
         np.random.seed(42)
         
-        # Match frontend's constants
         investment_experiences = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']
         risk_tolerances = ['CONSERVATIVE', 'MODERATE', 'AGGRESSIVE']
         investment_goals = [
@@ -47,62 +44,162 @@ class RiskAssessmentModel:
             'EMERGENCY_FUND',
             'TAX_SAVING',
         ]
-        risk_levels = ['conservative', 'moderate', 'aggressive']
+        
+        ages = np.random.randint(18, 75, n_samples)
+        # Broad range of incomes (supports both INR ₹50,000 to ₹10,000,000 and USD)
+        incomes = np.random.uniform(50000, 10000000, n_samples)
+        experiences = np.random.choice(investment_experiences, n_samples, p=[0.35, 0.35, 0.20, 0.10])
+        tolerances = np.random.choice(risk_tolerances, n_samples, p=[0.33, 0.34, 0.33])
+        goals = np.random.choice(investment_goals, n_samples)
+        horizons = np.random.randint(1, 30, n_samples)
+        dtis = np.clip(np.random.beta(2, 5, n_samples) * 1.2, 0.05, 1.0)
+        
+        risk_levels = []
+        for i in range(n_samples):
+            # Financial Scoring (0 to 100)
+            # 1. Stated Risk Tolerance (weight 40%) - user's explicit psychological willingness
+            tol_map = {'CONSERVATIVE': 15, 'MODERATE': 50, 'AGGRESSIVE': 85}
+            tol_score = tol_map[tolerances[i]]
+            
+            # 2. Time Horizon (weight 25%) - ability to ride out market cycles
+            h = horizons[i]
+            if h <= 2:
+                h_score = 15
+            elif h <= 5:
+                h_score = 40
+            elif h <= 10:
+                h_score = 65
+            else:
+                h_score = 85
+                
+            # 3. Age Factor (weight 15%) - capacity for wealth recovery
+            a = ages[i]
+            if a < 30:
+                a_score = 80
+            elif a < 45:
+                a_score = 60
+            elif a < 60:
+                a_score = 40
+            else:
+                a_score = 20
+                
+            # 4. Debt-To-Income Ratio (weight 10%) - financial cushion
+            d = dtis[i]
+            if d <= 0.2:
+                d_score = 80
+            elif d <= 0.4:
+                d_score = 55
+            elif d <= 0.6:
+                d_score = 35
+            else:
+                d_score = 15
+                
+            # 5. Experience Level (weight 10%)
+            exp_map = {'BEGINNER': 25, 'INTERMEDIATE': 50, 'ADVANCED': 75, 'EXPERT': 90}
+            exp_score = exp_map[experiences[i]]
+            
+            goal_mod = 0
+            if goals[i] in ['EMERGENCY_FUND', 'RETIREMENT'] and a > 50:
+                goal_mod = -8
+            elif goals[i] == 'WEALTH_GROWTH':
+                goal_mod = +5
+                
+            total_score = (
+                0.40 * tol_score +
+                0.25 * h_score +
+                0.15 * a_score +
+                0.10 * d_score +
+                0.10 * exp_score +
+                goal_mod +
+                np.random.normal(0, 3) # subtle noise
+            )
+            
+            # Strict financial principles:
+            # Conservative tolerance or very short horizon (<3 years) caps risk
+            if tolerances[i] == 'CONSERVATIVE' and h <= 3:
+                risk_levels.append('conservative')
+            elif tolerances[i] == 'CONSERVATIVE' and total_score < 50:
+                risk_levels.append('conservative')
+            elif total_score < 40:
+                risk_levels.append('conservative')
+            elif total_score <= 68:
+                risk_levels.append('moderate')
+            else:
+                risk_levels.append('aggressive')
         
         data = {
-            'age': np.random.randint(18, 80, n_samples),
-            'income': np.random.uniform(20000, 500000, n_samples),
-            'investment_experience': np.random.choice(investment_experiences, n_samples),
-            'risk_tolerance': np.random.choice(risk_tolerances, n_samples),
-            'investment_goal': np.random.choice(investment_goals, n_samples),
-            'time_horizon': np.random.randint(1, 30, n_samples),
-            'debt_to_income': np.random.uniform(0, 1.5, n_samples),
+            'age': ages,
+            'income': incomes,
+            'investment_experience': experiences,
+            'risk_tolerance': tolerances,
+            'investment_goal': goals,
+            'time_horizon': horizons,
+            'debt_to_income': dtis,
+            'risk_level': risk_levels
         }
-        
-        df = pd.DataFrame(data)
-        
-        # Directly assign risk levels with balanced distribution
-        df['risk_level'] = np.random.choice(risk_levels, size=n_samples, p=[0.33, 0.34, 0.33])
-        
-        # Now adjust features to correlate with risk level
-        # Conservative: older, lower income, beginner, conservative tolerance, short horizon, high DTI
-        # Aggressive: younger, higher income, advanced/expert, aggressive tolerance, long horizon, low DTI
-        for i in range(len(df)):
-            if df.loc[i, 'risk_level'] == 'conservative':
-                df.loc[i, 'age'] = np.random.randint(50, 80)
-                df.loc[i, 'income'] = np.random.uniform(20000, 80000)
-                df.loc[i, 'investment_experience'] = 'BEGINNER'
-                df.loc[i, 'risk_tolerance'] = 'CONSERVATIVE'
-                df.loc[i, 'investment_goal'] = np.random.choice(['EMERGENCY_FUND', 'HOME_PURCHASE'])
-                df.loc[i, 'time_horizon'] = np.random.randint(1, 5)
-                df.loc[i, 'debt_to_income'] = np.random.uniform(0.5, 1.5)
-            elif df.loc[i, 'risk_level'] == 'aggressive':
-                df.loc[i, 'age'] = np.random.randint(18, 40)
-                df.loc[i, 'income'] = np.random.uniform(100000, 500000)
-                df.loc[i, 'investment_experience'] = np.random.choice(['ADVANCED', 'EXPERT'])
-                df.loc[i, 'risk_tolerance'] = 'AGGRESSIVE'
-                df.loc[i, 'investment_goal'] = np.random.choice(['WEALTH_GROWTH', 'TAX_SAVING'])
-                df.loc[i, 'time_horizon'] = np.random.randint(15, 30)
-                df.loc[i, 'debt_to_income'] = np.random.uniform(0, 0.4)
-        
-        return df
+        return pd.DataFrame(data)
     
     def preprocess_data(self, df: pd.DataFrame, is_training: bool = True):
         df_processed = df.copy()
         
         categorical_cols = ['investment_experience', 'risk_tolerance', 'investment_goal']
         
+        goal_aliases = {
+            'wealth': 'wealth_growth',
+            'growth': 'wealth_growth',
+            'wealth_growth': 'wealth_growth',
+            'retire': 'retirement',
+            'retirement': 'retirement',
+            'tax': 'tax_saving',
+            'tax_saving': 'tax_saving',
+            'home': 'home_purchase',
+            'home_purchase': 'home_purchase',
+            'emergency': 'emergency_fund',
+            'emergency_fund': 'emergency_fund',
+            'education': 'education'
+        }
+        tolerance_aliases = {
+            'low': 'conservative',
+            'conservative': 'conservative',
+            'medium': 'moderate',
+            'moderate': 'moderate',
+            'high': 'aggressive',
+            'very_high': 'aggressive',
+            'aggressive': 'aggressive'
+        }
+        experience_aliases = {
+            'novice': 'beginner',
+            'beginner': 'beginner',
+            'intermediate': 'intermediate',
+            'advanced': 'advanced',
+            'senior': 'expert',
+            'expert': 'expert'
+        }
+        
         for col in categorical_cols:
-            # Convert to lowercase to handle case insensitivity
-            df_processed[col] = df_processed[col].astype(str).str.lower()
+            df_processed[col] = df_processed[col].astype(str).str.lower().str.strip()
+            if col == 'investment_goal':
+                df_processed[col] = df_processed[col].map(goal_aliases).fillna('wealth_growth')
+            elif col == 'risk_tolerance':
+                df_processed[col] = df_processed[col].map(tolerance_aliases).fillna('moderate')
+            elif col == 'investment_experience':
+                df_processed[col] = df_processed[col].map(experience_aliases).fillna('beginner')
+
             if is_training:
                 le = LabelEncoder()
                 df_processed[col] = le.fit_transform(df_processed[col])
                 self.label_encoders[col] = le
             else:
-                df_processed[col] = self.label_encoders[col].transform(df_processed[col])
+                le = self.label_encoders[col]
+                known_classes = set(le.classes_)
+                default_class = le.classes_[0]
+                df_processed[col] = df_processed[col].apply(lambda x: x if x in known_classes else default_class)
+                df_processed[col] = le.transform(df_processed[col])
         
         numerical_cols = ['age', 'income', 'time_horizon', 'debt_to_income']
+        
+        # Log-transform income so ₹1,00,00,000 or $50,000 are scaled without extreme outlier distortion
+        df_processed['income'] = np.log1p(np.maximum(df_processed['income'], 0))
         
         if is_training:
             df_processed[numerical_cols] = self.scaler.fit_transform(df_processed[numerical_cols])
@@ -118,7 +215,8 @@ class RiskAssessmentModel:
         df_processed = self.preprocess_data(df, is_training=True)
         
         X = df_processed[self.feature_names]
-        y = LabelEncoder().fit_transform(df_processed['risk_level'])
+        self.target_encoder = LabelEncoder()
+        y = self.target_encoder.fit_transform(df_processed['risk_level'])
         
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=42, stratify=y
@@ -126,10 +224,9 @@ class RiskAssessmentModel:
         
         self.model = XGBClassifier(
             n_estimators=100,
-            max_depth=6,
-            learning_rate=0.1,
+            max_depth=5,
+            learning_rate=0.08,
             random_state=42,
-            use_label_encoder=False,
             eval_metric='mlogloss'
         )
         
@@ -140,7 +237,7 @@ class RiskAssessmentModel:
         print("Model Training Complete!")
         print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
         print("\nClassification Report:")
-        print(classification_report(y_test, y_pred))
+        print(classification_report(y_test, y_pred, target_names=self.target_encoder.classes_))
         
         return self.model
     
@@ -148,18 +245,22 @@ class RiskAssessmentModel:
         df = pd.DataFrame([user_data])
         df_processed = self.preprocess_data(df, is_training=False)
         X = df_processed[self.feature_names]
+        
         prediction = self.model.predict(X)
         prediction_proba = self.model.predict_proba(X)
         
-        risk_levels = ['conservative', 'moderate', 'aggressive']
+        # Exact mapping using the fitted target encoder
+        predicted_label = self.target_encoder.inverse_transform(prediction)[0]
+        
+        probabilities = {
+            cls: float(prob)
+            for cls, prob in zip(self.target_encoder.classes_, prediction_proba[0])
+        }
         
         return {
-            'risk_level': risk_levels[int(prediction[0])],
+            'risk_level': predicted_label,
             'confidence': float(max(prediction_proba[0])),
-            'probabilities': {
-                level: float(prob) 
-                for level, prob in zip(risk_levels, prediction_proba[0])
-            }
+            'probabilities': probabilities
         }
     
     def save_model(self, path: str):
@@ -167,7 +268,8 @@ class RiskAssessmentModel:
         joblib.dump({
             'model': self.model,
             'scaler': self.scaler,
-            'label_encoders': self.label_encoders
+            'label_encoders': self.label_encoders,
+            'target_encoder': self.target_encoder
         }, path)
         print(f"Model saved to {path}")
     
@@ -176,4 +278,9 @@ class RiskAssessmentModel:
         self.model = data['model']
         self.scaler = data['scaler']
         self.label_encoders = data['label_encoders']
+        self.target_encoder = data.get('target_encoder')
+        if self.target_encoder is None:
+            le = LabelEncoder()
+            le.classes_ = np.array(['aggressive', 'conservative', 'moderate'])
+            self.target_encoder = le
         print(f"Model loaded from {path}")

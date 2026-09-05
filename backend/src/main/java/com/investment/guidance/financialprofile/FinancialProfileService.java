@@ -48,8 +48,19 @@ public class FinancialProfileService {
         mlProfile.put("debt_to_income", debtToIncomeRatio != null ? debtToIncomeRatio.divide(BigDecimal.valueOf(100)) : BigDecimal.valueOf(0.3));
 
         Map<String, Object> riskAssessment = mlServiceClient.assessRisk(mlProfile);
-        profile.setPredictedRiskLevel((String) riskAssessment.get("riskLevel"));
-        profile.setCurrentRiskConfidence(BigDecimal.valueOf((Double) riskAssessment.get("confidence")));
+        String predictedLevel = (String) riskAssessment.get("riskLevel");
+        if (predictedLevel == null) {
+            predictedLevel = (String) riskAssessment.get("risk_level");
+        }
+        if (predictedLevel != null) {
+            predictedLevel = predictedLevel.toUpperCase();
+        }
+        profile.setPredictedRiskLevel(predictedLevel);
+
+        Object conf = riskAssessment.get("confidence");
+        if (conf instanceof Number number) {
+            profile.setCurrentRiskConfidence(BigDecimal.valueOf(number.doubleValue()));
+        }
 
         profile = repository.save(profile);
 

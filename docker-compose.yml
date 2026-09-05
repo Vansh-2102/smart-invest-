@@ -28,6 +28,8 @@ services:
       - "db.oyoktwoaqemssdqitggb.supabase.co:65.0.195.55"
     ports:
       - "8081:8081"
+    env_file:
+      - ./backend/.env
     environment:
       - AI_ML_SERVICE_URL=http://ml:8000
     depends_on:

@@ -24,6 +24,7 @@ export const ASSET_COLORS = {
   stocks:      '#10B981',
   mutualFunds: '#3B82F6',
   bonds:       '#6366F1',
+  banking:     '#06B6D4',
   gold:        '#F59E0B',
   crypto:      '#EC4899',
   cash:        '#6B7280',

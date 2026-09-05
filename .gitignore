@@ -37,6 +37,13 @@ ml/data/*/*.zip
 
 # Environment Variables & Secrets
 .env
+.env.*
+!.env.example
 ml/.env
 backend/.env
 frontend/.env
+backend/src/main/resources/application.properties
+backend/src/main/resources/application-*.properties
+*.properties
+!*.properties.example
+

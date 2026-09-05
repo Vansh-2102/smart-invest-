@@ -15,7 +15,7 @@ class FinancialChatbot:
         if not groq_api_key:
             print("Warning: GROQ_API_KEY is not set in environment variables.")
         
-        model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
         
         # Initialize Groq LLM model
         self.llm = ChatGroq(

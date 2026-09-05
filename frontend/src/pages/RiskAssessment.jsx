@@ -15,7 +15,19 @@ const RISK_DESCRIPTIONS = {
     color: 'emerald',
     recommendations: ['Fixed Deposits', 'Government Bonds', 'Debt Mutual Funds', 'Gold ETFs'],
   },
+  CONSERVATIVE: {
+    title: 'Conservative Investor',
+    desc:  'You prefer capital preservation over growth. You are comfortable with lower returns in exchange for minimal risk and volatility.',
+    color: 'emerald',
+    recommendations: ['Fixed Deposits', 'Government Bonds', 'Debt Mutual Funds', 'Gold ETFs'],
+  },
   MEDIUM: {
+    title: 'Balanced Investor',
+    desc:  'You seek a balance between growth and stability. You can tolerate moderate market fluctuations to achieve reasonable returns over time.',
+    color: 'yellow',
+    recommendations: ['Large Cap Funds', 'Balanced Advantage Funds', 'Corporate Bonds', 'Blue-Chip Stocks'],
+  },
+  MODERATE: {
     title: 'Balanced Investor',
     desc:  'You seek a balance between growth and stability. You can tolerate moderate market fluctuations to achieve reasonable returns over time.',
     color: 'yellow',
@@ -26,6 +38,12 @@ const RISK_DESCRIPTIONS = {
     desc:  'You prioritize long-term capital appreciation. You are comfortable with significant short-term volatility in pursuit of higher returns.',
     color: 'orange',
     recommendations: ['Mid & Small Cap Funds', 'Sectoral Funds', 'Direct Equity', 'REITs'],
+  },
+  AGGRESSIVE: {
+    title: 'Aggressive Investor',
+    desc:  'You seek maximum returns and can withstand extreme market volatility. Your long time horizon allows for high-risk investments.',
+    color: 'red',
+    recommendations: ['Small Cap Stocks', 'Crypto Assets', 'Options Trading', 'International Funds'],
   },
   VERY_HIGH: {
     title: 'Aggressive Investor',
@@ -83,8 +101,8 @@ export default function RiskAssessment() {
 
   if (loading) return <PageLoader />;
 
-  const level    = profile?.predictedRiskLevel;
-  const config   = RISK_DESCRIPTIONS[level] || null;
+  const level    = profile?.predictedRiskLevel?.toUpperCase() || 'MODERATE';
+  const config   = RISK_DESCRIPTIONS[level] || RISK_DESCRIPTIONS.MODERATE;
   const confidence = profile?.currentRiskConfidence || 0;
 
   return (

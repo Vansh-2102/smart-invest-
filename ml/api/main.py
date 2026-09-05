@@ -61,9 +61,9 @@ async def startup_event():
 class UserRiskProfile(BaseModel):
     age: int
     income: float
-    investment_experience: str = "beginner"
-    risk_tolerance: str = "medium"
-    investment_goal: str = "wealth"
+    investment_experience: str = "BEGINNER"
+    risk_tolerance: str = "MODERATE"
+    investment_goal: str = "WEALTH_GROWTH"
     time_horizon: int = 10
     debt_to_income: float = 0.3
 
@@ -90,6 +90,8 @@ async def assess_risk(profile: UserRiskProfile):
     try:
         print("Received profile:", profile.model_dump())
         result = risk_model.predict(profile.model_dump())
+        if "risk_level" in result:
+            result["riskLevel"] = result["risk_level"].upper()
         return {"success": True, "data": result}
     except Exception as e:
         print("Error in assess_risk:")

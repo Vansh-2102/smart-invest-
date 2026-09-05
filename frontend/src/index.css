@@ -170,3 +170,158 @@
   .animation-delay-200 { animation-delay: 0.2s; }
   .animation-delay-300 { animation-delay: 0.3s; }
 }
+
+/* ==========================================================================
+   LIGHT THEME OVERRIDES
+   ========================================================================== */
+html.light body,
+html:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light .bg-gray-950,
+html:not(.dark) .bg-gray-950,
+html.light .bg-gray-950\/95,
+html:not(.dark) .bg-gray-950\/95,
+html.light .bg-gray-950\/80,
+html:not(.dark) .bg-gray-950\/80 {
+  background-color: #ffffff !important;
+}
+
+html.light header,
+html:not(.dark) header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light aside,
+html:not(.dark) aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .glass-card,
+html:not(.dark) .glass-card,
+html.light .bg-gray-900,
+html:not(.dark) .bg-gray-900 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .bg-gray-900\/60,
+html:not(.dark) .bg-gray-900\/60,
+html.light .bg-gray-900\/40,
+html:not(.dark) .bg-gray-900\/40,
+html.light .bg-gray-900\/80,
+html:not(.dark) .bg-gray-900\/80 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-gray-800,
+html:not(.dark) .bg-gray-800,
+html.light .bg-gray-800\/50,
+html:not(.dark) .bg-gray-800\/50,
+html.light .bg-gray-800\/60,
+html:not(.dark) .bg-gray-800\/60,
+html.light .bg-gray-800\/30,
+html:not(.dark) .bg-gray-800\/30,
+html.light .bg-gray-800\/40,
+html:not(.dark) .bg-gray-800\/40 {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light .border-gray-800,
+html:not(.dark) .border-gray-800,
+html.light .border-gray-800\/50,
+html:not(.dark) .border-gray-800\/50,
+html.light .border-gray-700,
+html:not(.dark) .border-gray-700,
+html.light .border-gray-700\/50,
+html:not(.dark) .border-gray-700\/50,
+html.light .border-gray-700\/40,
+html:not(.dark) .border-gray-700\/40,
+html.light .border-gray-700\/60,
+html:not(.dark) .border-gray-700\/60 {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .text-white,
+html:not(.dark) .text-white,
+html.light .text-gray-100,
+html:not(.dark) .text-gray-100,
+html.light .text-gray-200,
+html:not(.dark) .text-gray-200 {
+  color: #0f172a !important;
+}
+
+html.light .text-gray-300,
+html:not(.dark) .text-gray-300,
+html.light .text-gray-400,
+html:not(.dark) .text-gray-400 {
+  color: #334155 !important;
+}
+
+html.light .text-gray-500,
+html:not(.dark) .text-gray-500 {
+  color: #64748b !important;
+}
+
+html.light .text-gray-600,
+html:not(.dark) .text-gray-600 {
+  color: #94a3b8 !important;
+}
+
+html.light .form-input,
+html:not(.dark) .form-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light .form-input::placeholder,
+html:not(.dark) .form-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light .nav-item,
+html:not(.dark) .nav-item {
+  color: #475569 !important;
+}
+
+html.light .nav-item:hover,
+html:not(.dark) .nav-item:hover {
+  background-color: #ecfdf5 !important;
+  color: #059669 !important;
+}
+
+html.light .nav-item-active,
+html:not(.dark) .nav-item-active {
+  background-color: #d1fae5 !important;
+  color: #047857 !important;
+  border-color: #6ee7b7 !important;
+}
+
+html.light .btn-secondary,
+html:not(.dark) .btn-secondary {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light .btn-secondary:hover,
+html:not(.dark) .btn-secondary:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light ::-webkit-scrollbar-track,
+html:not(.dark) ::-webkit-scrollbar-track {
+  background-color: #f1f5f9 !important;
+}
+
+html.light ::-webkit-scrollbar-thumb,
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1 !important;
+}
