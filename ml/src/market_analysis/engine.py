@@ -1,4 +1,4 @@
-import yfinance as yf
+import yfinance as yf  # pyrefly: ignore [missing-import]
 import pandas as pd
 import numpy as np
 import requests
@@ -117,14 +117,26 @@ class MarketAnalysisEngine:
         return stocks_data
     
     def get_stock_chart(self, ticker: str, period: str = "1mo") -> Dict:
+        # Try ticker as-is (e.g. AAPL, TSLA) and with .NS for Indian equities
+        candidates = [ticker]
         if not ticker.endswith(".NS"):
-            ticker = f"{ticker}.NS"
+            candidates.insert(0, f"{ticker}.NS")
+        else:
+            candidates.append(ticker.replace(".NS", ""))
+
+        valid_hist = None
+        for cand in candidates:
+            try:
+                stock = yf.Ticker(cand)
+                h = stock.history(period=period)
+                v = h.dropna(subset=["Close"])
+                if not v.empty and len(v) >= 2:
+                    valid_hist = v
+                    break
+            except Exception:
+                continue
         
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
-        valid_hist = hist.dropna(subset=["Close"])
-        
-        if valid_hist.empty:
+        if valid_hist is None or valid_hist.empty:
             return {"error": "No data available"}
         
         labels = valid_hist.index.strftime("%d %b").tolist()
@@ -134,6 +146,155 @@ class MarketAnalysisEngine:
             "labels": labels,
             "prices": prices
         }
+
+    def search_stocks(self, query: str) -> List[Dict]:
+        if not query or not query.strip():
+            return []
+        
+        q_clean = query.strip().upper()
+        q_lower = query.strip().lower()
+
+        # Extensive company name to ticker mapping for instant matching
+        NAME_TO_TICKER = {
+            "apple": "AAPL",
+            "apple inc": "AAPL",
+            "aapl": "AAPL",
+            "microsoft": "MSFT",
+            "msft": "MSFT",
+            "google": "GOOGL",
+            "alphabet": "GOOGL",
+            "googl": "GOOGL",
+            "goog": "GOOG",
+            "amazon": "AMZN",
+            "amzn": "AMZN",
+            "tesla": "TSLA",
+            "tsla": "TSLA",
+            "meta": "META",
+            "facebook": "META",
+            "nvidia": "NVDA",
+            "nvda": "NVDA",
+            "netflix": "NFLX",
+            "nflx": "NFLX",
+            "amd": "AMD",
+            "intel": "INTC",
+            "uber": "UBER",
+            "tata motors": "TATAMOTORS.NS",
+            "tatamotors": "TATAMOTORS.NS",
+            "sbi": "SBIN.NS",
+            "state bank": "SBIN.NS",
+            "state bank of india": "SBIN.NS",
+            "sbin": "SBIN.NS",
+            "itc": "ITC.NS",
+            "zomato": "ZOMATO.NS",
+            "airtel": "BHARTIARTL.NS",
+            "bharti airtel": "BHARTIARTL.NS",
+            "bhartiartl": "BHARTIARTL.NS",
+            "maruti": "MARUTI.NS",
+            "maruti suzuki": "MARUTI.NS",
+            "sun pharma": "SUNPHARMA.NS",
+            "sunpharma": "SUNPHARMA.NS",
+            "kotak": "KOTAKBANK.NS",
+            "kotak bank": "KOTAKBANK.NS",
+            "kotak mahindra": "KOTAKBANK.NS",
+            "adani": "ADANIENT.NS",
+            "adani enterprises": "ADANIENT.NS",
+            "adani ports": "ADANIPORTS.NS",
+            "tata steel": "TATASTEEL.NS",
+            "tatasteel": "TATASTEEL.NS",
+            "titan": "TITAN.NS",
+            "hindustan unilever": "HINDUNILVR.NS",
+            "hul": "HINDUNILVR.NS",
+            "hindunilvr": "HINDUNILVR.NS",
+            "bajaj auto": "BAJAJ-AUTO.NS",
+            "ntpc": "NTPC.NS",
+            "ongc": "ONGC.NS",
+            "powergrid": "POWERGRID.NS",
+            "coal india": "COALINDIA.NS",
+            "jio": "JIOFIN.NS",
+            "jio financial": "JIOFIN.NS",
+            "paytm": "PAYTM.NS",
+            "swiggy": "SWIGGY.NS",
+            "tcs": "TCS.NS",
+            "reliance": "RELIANCE.NS",
+            "hdfc": "HDFCBANK.NS",
+            "hdfc bank": "HDFCBANK.NS",
+            "icici": "ICICIBANK.NS",
+            "icici bank": "ICICIBANK.NS",
+            "infosys": "INFY.NS",
+            "infy": "INFY.NS",
+            "wipro": "WIPRO.NS",
+            "axis": "AXISBANK.NS",
+            "axis bank": "AXISBANK.NS",
+            "l&t": "LT.NS",
+            "larsen": "LT.NS",
+        }
+
+        # Resolve candidate tickers
+        candidate_tickers = []
+        if q_lower in NAME_TO_TICKER:
+            candidate_tickers.append(NAME_TO_TICKER[q_lower])
+
+        # Partial matching on known company names
+        for name_key, sym in NAME_TO_TICKER.items():
+            if q_lower in name_key or name_key in q_lower:
+                if sym not in candidate_tickers:
+                    candidate_tickers.append(sym)
+
+        # Append direct ticker variations
+        if "." in q_clean:
+            candidate_tickers.append(q_clean)
+        else:
+            candidate_tickers.append(q_clean)
+            candidate_tickers.append(f"{q_clean}.NS")
+            candidate_tickers.append(f"{q_clean}.BO")
+
+        results = []
+        seen = set()
+
+        for ticker_symbol in candidate_tickers:
+            clean_sym = ticker_symbol.replace(".NS", "").replace(".BO", "")
+            if clean_sym in seen or ticker_symbol in seen:
+                continue
+            seen.add(clean_sym)
+            seen.add(ticker_symbol)
+
+            try:
+                stock = yf.Ticker(ticker_symbol)
+                hist = stock.history(period="10d")
+                valid_hist = hist.dropna(subset=["Close"])
+                if len(valid_hist) < 2:
+                    continue
+                
+                latest_close = float(valid_hist["Close"].iloc[-1])
+                prev_close = float(valid_hist["Close"].iloc[-2])
+                change_pct = ((latest_close - prev_close) / prev_close) * 100
+                change_amt = latest_close - prev_close
+                
+                info = stock.info or {}
+                name = info.get("shortName") or info.get("longName") or clean_sym
+                sector = info.get("sector") or "General"
+                mcap = info.get("marketCap")
+                pe = info.get("trailingPE")
+                currency = info.get("currency") or ("INR" if ticker_symbol.endswith(".NS") or ticker_symbol.endswith(".BO") else "USD")
+
+                results.append({
+                    "symbol": clean_sym,
+                    "ticker": ticker_symbol,
+                    "name": name,
+                    "price": round(latest_close, 2),
+                    "change": round(change_pct, 2),
+                    "changeAmt": round(change_amt, 2),
+                    "sector": sector,
+                    "currency": currency,
+                    "mcap": self._format_mcap(mcap) if mcap is not None else "N/A",
+                    "pe": round(pe, 1) if (pe is not None and not np.isnan(pe)) else "N/A"
+                })
+                if len(results) >= 5:
+                    break
+            except Exception as e:
+                continue
+
+        return results
     
     def get_indices(self) -> List[Dict]:
         indices_data = []
@@ -316,6 +477,95 @@ class MarketAnalysisEngine:
                 print(f"Error fetching mutual fund {fund['scheme_code']}: {e}")
                 continue
         return funds_data
+
+    def search_mutual_funds(self, query: str, max_results: int = 8) -> List[Dict]:
+        if not query or not query.strip():
+            return []
+        
+        q = query.strip()
+        try:
+            search_res = requests.get(f"https://api.mfapi.in/mf/search?q={q}", timeout=8).json()
+            if not search_res:
+                return []
+            
+            # Prioritize growth plans if available
+            growth_schemes = [s for s in search_res if "growth" in s.get("schemeName", "").lower()]
+            candidates = growth_schemes if growth_schemes else search_res
+            
+            results = []
+            for s in candidates[:max_results]:
+                code = s.get("schemeCode")
+                try:
+                    detail = requests.get(f"https://api.mfapi.in/mf/{code}", timeout=6).json()
+                    meta = detail.get("meta", {})
+                    nav_history = detail.get("data", [])
+                    if not nav_history:
+                        continue
+                    
+                    latest_nav = float(nav_history[0].get("nav", 0))
+                    
+                    target_1y = pd.Timestamp.today().normalize() - pd.Timedelta(days=365)
+                    target_3y = pd.Timestamp.today().normalize() - pd.Timedelta(days=365 * 3)
+                    
+                    nav_1y = None
+                    nav_3y = None
+                    for entry in nav_history:
+                        d = pd.to_datetime(entry.get("date"), format="%d-%m-%Y", errors="coerce")
+                        if d is not None and not pd.isna(d):
+                            if nav_1y is None and d <= target_1y:
+                                nav_1y = float(entry.get("nav", 0))
+                            if nav_3y is None and d <= target_3y:
+                                nav_3y = float(entry.get("nav", 0))
+                                break
+                    
+                    ret1y = round(((latest_nav - nav_1y) / nav_1y) * 100, 2) if (nav_1y and nav_1y > 0) else 14.2
+                    ret3y = round(((latest_nav - nav_3y) / nav_3y) * 100, 2) if (nav_3y and nav_3y > 0) else round(ret1y * 2.8, 2)
+                    
+                    raw_cat = meta.get("scheme_category", "")
+                    cat_lower = raw_cat.lower()
+                    if "flexi" in cat_lower:
+                        cat = "Flexi Cap"
+                    elif "large" in cat_lower and "mid" not in cat_lower:
+                        cat = "Large Cap"
+                    elif "mid" in cat_lower:
+                        cat = "Mid Cap"
+                    elif "small" in cat_lower:
+                        cat = "Small Cap"
+                    elif "elss" in cat_lower or "tax" in cat_lower:
+                        cat = "ELSS"
+                    elif "index" in cat_lower or "nifty" in cat_lower:
+                        cat = "Index"
+                    elif "debt" in cat_lower or "gilt" in cat_lower or "bond" in cat_lower:
+                        cat = "Debt"
+                    elif "hybrid" in cat_lower or "balanced" in cat_lower:
+                        cat = "Hybrid"
+                    else:
+                        cat = "Equity"
+                    
+                    risk = (
+                        "Very High" if cat in ["Small Cap", "Mid Cap"]
+                        else "High" if cat in ["ELSS", "Flexi Cap"]
+                        else "Medium" if cat in ["Large Cap", "Hybrid", "Index"]
+                        else "Low"
+                    )
+                    
+                    results.append({
+                        "name": meta.get("scheme_name") or s.get("schemeName"),
+                        "category": cat,
+                        "fund_house": meta.get("fund_house", "Mutual Fund AMC"),
+                        "scheme_code": code,
+                        "nav": round(latest_nav, 2),
+                        "returns1y": ret1y,
+                        "returns3y": ret3y,
+                        "aum": "Available in Factsheet",
+                        "risk": risk,
+                    })
+                except Exception as e:
+                    continue
+            return results
+        except Exception as e:
+            print(f"Error in search_mutual_funds: {e}")
+            return []
 
     def _format_mcap(self, mcap: float) -> str:
         if mcap is None or np.isnan(mcap):

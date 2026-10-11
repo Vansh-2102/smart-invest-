@@ -1,11 +1,11 @@
 import os
+
 from dotenv import load_dotenv
 from typing import List, Dict
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-# pyrefly: ignore [missing-import]
-from duckduckgo_search import DDGS
+from langchain_groq import ChatGroq  # pyrefly: ignore [missing-import]
+from langchain_core.prompts import ChatPromptTemplate  # pyrefly: ignore [missing-import]
+from langchain_core.output_parsers import StrOutputParser  # pyrefly: ignore [missing-import]
+from duckduckgo_search import DDGS  # pyrefly: ignore [missing-import]
 
 load_dotenv()
 

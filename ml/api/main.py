@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException  # pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware  # pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 from typing import List, Dict
 from pathlib import Path
@@ -139,6 +139,14 @@ async def get_top_stocks():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/market/stocks/search")
+async def search_stocks(q: str):
+    try:
+        stocks = market_analyzer.search_stocks(q)
+        return {"success": True, "data": stocks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/market/stocks/{symbol}/chart")
 async def get_stock_chart(symbol: str, period: str = "1mo"):
     try:
@@ -191,6 +199,14 @@ async def get_mutual_funds():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/market/mutual-funds/search")
+async def search_mutual_funds(q: str):
+    try:
+        funds = market_analyzer.search_mutual_funds(q)
+        return {"success": True, "data": funds}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn  # pyrefly: ignore [missing-import]
     uvicorn.run(app, host="0.0.0.0", port=8000)
