@@ -38,7 +38,14 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role = Role.USER;
+    private Role role;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.role == null) {
+            this.role = Role.USER;
+        }
+    }
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

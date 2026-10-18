@@ -1,13 +1,21 @@
 package com.investment.guidance.user.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class AuthResponse {
     private String token;
-    private String type = "Bearer";
+    private String type;
+
+    public AuthResponse(String token) {
+        this.token = token;
+        this.type = "Bearer";
+    }
+
+    public AuthResponse(String token, String type) {
+        this.token = token;
+        this.type = type != null ? type : "Bearer";
+    }
 }

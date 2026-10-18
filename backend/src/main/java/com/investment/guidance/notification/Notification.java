@@ -36,7 +36,14 @@ public class Notification {
     private NotificationType type;
 
     @Column(nullable = false)
-    private Boolean isRead = false;
+    private Boolean isRead;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.isRead == null) {
+            this.isRead = false;
+        }
+    }
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
