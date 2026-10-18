@@ -255,3 +255,55 @@ User Financial Query
 * **Faithfulness / Groundedness Score:** **0.95 / 1.0** (Absence of hallucination; statements traceable to retrieved data)
 * **Time-to-First-Token (TTFT):** **~380 ms** (Ultra-low latency powered by Groq LPU hardware)
 * **Word Streaming Velocity:** **~50 words/second** (Smooth real-time typewriter experience)
+
+---
+
+## 6. Datasets & Training Data Architecture
+
+The machine learning and deep learning models in InvestIQ were trained and evaluated on a combination of empirical financial surveys, curated academic NLP benchmark datasets, and multi-year historical capital market feeds.
+
+### 6.1 Training Datasets Summary Matrix
+
+| # | Model / Pipeline | Dataset Name | Source / Benchmark | File Location | Sample Size / Duration | Target Labels / Output |
+| :-: | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **Risk Assessment (XGBoost)** | **SCF 2022 + Stratified Demographic Dataset** | Federal Reserve Survey of Consumer Finances (SCF) | [`ml/data/scf2022_tables_internal_real_historical.xlsx`](file:///c:/Users/vansh/OneDrive/coding/Project/FYP/ml/data/scf2022_tables_internal_real_historical.xlsx) | **5,000 multi-dimensional profiles** | 3 Classes: `Conservative`, `Moderate`, `Aggressive` |
+| **2** | **News Sentiment (FinBERT)** | **FinancialPhraseBank** | Malo et al. (Aalto University / Helsinki School of Economics) | [`ml/data/financial_phrasebank/`](file:///c:/Users/vansh/OneDrive/coding/Project/FYP/ml/data/financial_phrasebank) & `financial sentiment analysis.zip` | **4,840 annotated financial sentences** | 3 Classes: `Bullish (Positive)`, `Bearish (Negative)`, `Neutral` |
+| **3** | **Portfolio Optimization (MPT)** | **S&P 500 Historical Equity Dataset** | Standard & Poor's / Yahoo Finance | [`ml/data/sp500/`](file:///c:/Users/vansh/OneDrive/coding/Project/FYP/ml/data/sp500) & `S&P 500 stock data.zip` | **500+ assets across multi-year OHLCV trading days** | Asset Returns, Covariance Matrix ($\Sigma$), Sharpe Ratio |
+| **4** | **VDA / Risk Modeling** | **Cryptocurrency Historical Price Dataset** | CoinMarketCap / Binance Historical Data | `cryptocurrency historical price.zip` | **Historical daily price & volume for top 100 cryptos** | Daily returns, max drawdown, historical volatility ($\sigma$) |
+| **5** | **Live Market Quotes & Tickers** | **Real-Time Financial APIs** | `yfinance` & Alpha Vantage | Online REST & Python streaming | **Real-time streaming prices & fundamentals** | Current Price, P/E Ratio, 52W High/Low, Beta ($\beta$) |
+
+---
+
+### 6.2 Deep Dive into Datasets
+
+#### A. Risk Assessment Dataset: Federal Reserve SCF & Demographic Profiles
+* **Primary Source:** Federal Reserve's **Survey of Consumer Finances (SCF 2022)**, the premier microeconomic benchmark for household financial health, liquid savings, net worth distributions, debt burdens, and risk tolerance across age brackets.
+* **Dataset Structure:** 5,000 comprehensive records preprocessed and generated via [`ml/src/risk_assessment/model.py`](file:///c:/Users/vansh/OneDrive/coding/Project/FYP/ml/src/risk_assessment/model.py) using empirical distributions:
+  * **Age (`age`):** Uniform integer distribution between 18 and 75 years.
+  * **Income (`income`):** Scaled distribution spanning ₹50,000 to ₹10,000,000+ per annum.
+  * **Experience (`investment_experience`):** Stratified categorical distribution: Beginner (35%), Intermediate (35%), Advanced (20%), Expert (10%).
+  * **Stated Tolerance (`risk_tolerance`):** Self-reported psychological risk tolerance (Conservative 33%, Moderate 34%, Aggressive 33%).
+  * **Goals (`investment_goal`):** Categorical: Wealth Growth, Retirement, Education, Home Purchase, Emergency Fund, Tax Saving.
+  * **Time Horizon (`time_horizon`):** 1 to 30 years.
+  * **Debt-to-Income (`debt_to_income`):** Beta distribution $\text{Beta}(\alpha=2, \beta=5) \times 1.2$ clamped to $[0.05, 1.0]$.
+* **Data Split:** **80% Training Set (4,000 samples)**, **20% Independent Test Set (1,000 samples)** with 5-fold stratified cross-validation.
+
+#### B. Financial Sentiment Dataset: FinancialPhraseBank
+* **Source & Citation:** Malo, P., Sinha, A., Korhonen, P., Wallenius, J., & Takala, P. (2014). *Good debt or bad debt: Detecting semantic orientations in economic texts.* Journal of the Association for Information Science and Technology.
+* **Corpus Composition:** 4,840 sentences randomly extracted from English financial news published on the LexisNexis news service.
+* **Annotation Process:** Labeled by 16 financial researchers and domain experts into Positive, Negative, and Neutral sentiment.
+* **Agreement Filtering:** Utilizes the $> 75\%$ consensus subset to ensure high-confidence supervised learning for FinBERT / DistilRoBERTa transfer learning.
+
+#### C. Capital Markets Dataset: S&P 500 & Crypto Historical Price Time-Series
+* **S&P 500 Historical Data (`ml/data/sp500/`):** Contains multi-year daily Open, High, Low, Close, Adjusted Close, and Volume for all index constituents. Used to calculate expected returns $\mu_i$, variances $\sigma_i^2$, and the covariance matrix $\Sigma$ required for the Markowitz Modern Portfolio Theory optimizer.
+* **Cryptocurrency Historical Dataset:** Tracks price discovery, extreme volatility cycles, and drawdown periods across Bitcoin, Ethereum, and major altcoins, establishing the empirical foundation for our `< 5%` cryptocurrency risk safety rules.
+
+---
+
+### 6.3 Data Preprocessing & Sanitization Pipeline
+
+To ensure model generalizability and avoid data leakage:
+1. **Logarithmic Income Transformation:** Because personal income follows a log-normal distribution, a natural log transformation $x_{\text{scaled}} = \ln(1 + \text{income})$ compresses extreme outliers and stabilizes gradient descent.
+2. **Categorical Encoding:** `LabelEncoder` and target mapping convert qualitative responses (e.g. experience level, investment goal) into standardized numerical representations.
+3. **Feature Normalization:** `StandardScaler` standardizes continuous variables ($z = \frac{x - \mu}{\sigma}$) to have zero mean and unit variance, preventing gradient dominance in the XGBoost tree nodes.
+4. **Noise Injection:** Subtle Gaussian noise $\mathcal{N}(0, 3)$ is injected during synthetic data preparation to reflect real-world behavioral inconsistency and avoid model overfitting.
