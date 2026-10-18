@@ -18,6 +18,7 @@ import MarketDashboard    from '../pages/MarketDashboard';
 import AIChatbot          from '../pages/AIChatbot';
 import NewsSentiment      from '../pages/NewsSentiment';
 import Settings           from '../pages/Settings';
+import InvestmentPlanning from '../pages/InvestmentPlanning';
 
 export default function AppRouter() {
   return (
@@ -44,6 +45,8 @@ export default function AppRouter() {
             <Route path="/market"               element={<MarketDashboard />} />
             <Route path="/chatbot"              element={<AIChatbot />} />
             <Route path="/news"                 element={<NewsSentiment />} />
+            <Route path="/learning-planning"    element={<InvestmentPlanning />} />
+            <Route path="/investment-planning"  element={<InvestmentPlanning />} />
             <Route path="/settings"             element={<Settings />} />
           </Route>
         </Route>

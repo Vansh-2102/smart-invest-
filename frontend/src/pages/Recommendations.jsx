@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Star, Zap, Clock, ChevronRight, TrendingUp, Shield, Sparkles,
   MessageSquare, Info, Landmark, BarChart2, Layers, Gem, CheckCircle2,
-  ArrowUpRight
+  ArrowUpRight, Scale, BookOpen
 } from 'lucide-react';
 import { useRecommendations } from '../hooks/useRecommendations';
 import { useFinancialProfile } from '../hooks/useFinancialProfile';
@@ -288,6 +288,15 @@ Please provide:
                       Diversification across Fixed Deposits, Stocks, Mutual Funds, and Gold
                     </p>
                   </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => navigate('/learning-planning')}
+                    className="text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                    icon={<BookOpen className="w-3.5 h-3.5 text-emerald-400" />}
+                  >
+                    Learning & Planning Studio
+                  </Button>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6 items-center">
@@ -442,6 +451,15 @@ Please provide:
                             <Button
                               size="sm"
                               variant="secondary"
+                              onClick={() => navigate(`/learning-planning?asset=${rec.category || rec.type || 'equities'}`, { state: { asset: rec } })}
+                              className="text-xs py-1 px-2.5 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                              icon={<Scale className="w-3.5 h-3.5 text-cyan-400" />}
+                            >
+                              Lump-Sum vs Phased
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
                               onClick={() => handleAskAI(rec)}
                               className="text-xs py-1 px-3 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                               icon={<Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
@@ -559,7 +577,7 @@ Please provide:
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-gray-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-800">
               <Button
                 variant="secondary"
                 size="sm"
@@ -568,17 +586,33 @@ Please provide:
                 Close
               </Button>
 
-              <Button
-                size="sm"
-                icon={<Sparkles className="w-4 h-4" />}
-                onClick={() => {
-                  const asset = activeAssetModal;
-                  setActiveAssetModal(null);
-                  handleAskAI(asset);
-                }}
-              >
-                Discuss with AI Advisor
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Scale className="w-4 h-4 text-cyan-400" />}
+                  onClick={() => {
+                    const asset = activeAssetModal;
+                    setActiveAssetModal(null);
+                    navigate(`/learning-planning?asset=${asset.category || asset.type || 'equities'}`, { state: { asset } });
+                  }}
+                  className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                >
+                  Lump-Sum vs Phased Plan
+                </Button>
+
+                <Button
+                  size="sm"
+                  icon={<Sparkles className="w-4 h-4" />}
+                  onClick={() => {
+                    const asset = activeAssetModal;
+                    setActiveAssetModal(null);
+                    handleAskAI(asset);
+                  }}
+                >
+                  Discuss with AI Advisor
+                </Button>
+              </div>
             </div>
           </div>
         </Modal>

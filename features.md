@@ -382,3 +382,4 @@ The unified command center aggregating all platform capabilities:
 | **AI Advisor** | `/chatbot` | **Groq LLM (Llama 3)** | Typewriter streaming, profile context injection |
 | **Notifications** | Navbar Bell | Spring Boot JPA, REST | System updates, market alerts, unread badge counter |
 | **Dashboard** | `/dashboard` | Integrated UI Components | Holistic financial summary, charts, quick links |
+| **Learning & Planning** | `/learning-planning` | Mathematical Allocation Simulators | Educational exploration of 4 asset classes, Lump-Sum vs. Phased investment comparison, tranche schedules |

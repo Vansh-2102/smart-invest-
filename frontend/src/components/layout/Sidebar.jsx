@@ -2,14 +2,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, User, ClipboardList, Shield, Star, Landmark,
   TrendingUp, BarChart2, Gem, Bitcoin, Globe, MessageSquare,
-  Newspaper, Settings, ChevronLeft, ChevronRight, LogOut, Zap,
+  Newspaper, Settings, ChevronLeft, ChevronRight, LogOut, Zap, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const ICON_MAP = {
   LayoutDashboard, User, ClipboardList, Shield, Star, Landmark,
   TrendingUp, BarChart2, Gem, Bitcoin, Globe, MessageSquare,
-  Newspaper, Settings,
+  Newspaper, Settings, BookOpen,
 };
 
 const NAV_GROUPS = [
@@ -21,6 +21,7 @@ const NAV_GROUPS = [
       { path: '/financial-profile', label: 'Financial Profile', icon: 'ClipboardList' },
       { path: '/risk-assessment',   label: 'Risk Assessment',   icon: 'Shield' },
       { path: '/recommendations',   label: 'Recommendations',   icon: 'Star' },
+      { path: '/learning-planning', label: 'Learning & Planning', icon: 'BookOpen' },
     ],
   },
   {

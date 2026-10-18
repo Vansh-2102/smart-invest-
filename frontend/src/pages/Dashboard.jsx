@@ -1,5 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Shield, Star, ArrowRight, BarChart2, Zap, RefreshCw } from 'lucide-react';
+import {
+  TrendingUp, Shield, Star, ArrowRight, BarChart2, Zap, RefreshCw,
+  Landmark, Gem, BookOpen, ChevronRight, Layers, Sparkles
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useFinancialProfile } from '../hooks/useFinancialProfile';
 import { useRecommendations } from '../hooks/useRecommendations';
@@ -53,6 +56,58 @@ export default function Dashboard() {
 
   const allocation = current?.assetAllocations || {};
   const assetRecs  = current?.assetRecommendations || [];
+  const totalInvestment = current?.totalInvestmentAmount || (profile?.annualIncome ? Math.round(profile.annualIncome * 0.2) : 1000000);
+
+  // Four core asset classes matching user portfolio structure
+  const fourAssetClasses = [
+    {
+      key: 'banking',
+      name: 'Liquid Cash & Banking',
+      percent: allocation.banking ?? 20,
+      icon: Landmark,
+      tagline: 'Fixed deposits, liquid funds, guaranteed capital preservation',
+      cagr: '7.25% p.a.'
+    },
+    {
+      key: 'equities',
+      name: 'High-Growth Equities',
+      percent: allocation.stocks ?? 35,
+      icon: BarChart2,
+      tagline: 'Blue-chips & tech monopolies driving long-term wealth compounding',
+      cagr: '16.2% p.a.'
+    },
+    {
+      key: 'funds',
+      name: 'Growth ETFs & Funds',
+      percent: allocation.mutualFunds ?? 25,
+      icon: TrendingUp,
+      tagline: 'Diversified index funds & market compounding baskets',
+      cagr: '14.5% p.a.'
+    },
+    {
+      key: 'gold',
+      name: 'Precious Metals & Gold',
+      percent: allocation.gold ?? 10,
+      icon: Gem,
+      tagline: 'Sovereign Gold Bonds & ETFs hedging against inflation & crashes',
+      cagr: '9.8% p.a.'
+    }
+  ];
+
+  const handleOpenAssetPlanning = (assetClass) => {
+    const amt = Math.round(totalInvestment * (assetClass.percent / 100));
+    navigate(`/learning-planning?asset=${assetClass.key}`, {
+      state: {
+        asset: {
+          category: assetClass.key,
+          category_label: assetClass.name,
+          name: assetClass.name,
+          allocation_amount: amt,
+          allocation_percent: assetClass.percent
+        }
+      }
+    });
+  };
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -189,12 +244,87 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Portfolio Asset Classes (Clickable to open Investment Learning & Planning) */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-gray-800">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-1">
+              <BookOpen className="w-3 h-3" /> Investment Learning & Planning
+            </div>
+            <h3 className="text-lg font-bold text-white">Recommended Portfolio Asset Classes</h3>
+            <p className="text-xs text-gray-400">
+              Click any asset card below to open the dedicated Learning & Planning studio (Lump-Sum vs. Phased strategy)
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/learning-planning')}
+            className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 self-start sm:self-auto"
+          >
+            Open Planning Studio <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {fourAssetClasses.map((item) => {
+            const ItemIcon = item.icon;
+            const allocatedAmount = Math.round(totalInvestment * (item.percent / 100));
+            return (
+              <div
+                key={item.key}
+                onClick={() => handleOpenAssetPlanning(item)}
+                className="group p-4 rounded-xl bg-gray-900/80 border border-gray-800 hover:border-emerald-500/40 hover:bg-gray-850/90 transition-all cursor-pointer flex flex-col justify-between shadow-lg hover:shadow-emerald-500/5 hover:-translate-y-0.5"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700/60 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                      <ItemIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      {item.percent}% Share
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    {item.name}
+                  </h4>
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                    {item.tagline}
+                  </p>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-gray-800/80">
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Recommended Amount</p>
+                      <p className="text-base font-extrabold text-white">
+                        {formatCurrency(allocatedAmount)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Benchmark</p>
+                      <p className="text-xs font-bold text-emerald-400">
+                        {item.cagr}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-emerald-400 font-medium mt-3 pt-2 border-t border-gray-800/40 group-hover:underline">
+                    <span>Plan & Learn</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
       {/* Recent recommendations */}
       {assetRecs.length > 0 && (
         <Card>
           <CardHeader
             title="Latest Recommendations"
-            subtitle="AI-generated investment suggestions"
+            subtitle="AI-generated investment suggestions (Click any to plan)"
             action={
               <button
                 onClick={() => navigate('/recommendations')}
@@ -206,18 +336,35 @@ export default function Dashboard() {
           />
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {assetRecs.slice(0, 6).map((rec, i) => (
-              <div key={i} className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30 hover:border-emerald-500/20 transition-colors">
+              <div
+                key={i}
+                onClick={() => navigate(`/learning-planning?asset=${rec.category || rec.type || 'equities'}`, { state: { asset: rec } })}
+                className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/30 hover:border-emerald-500/40 hover:bg-gray-800/70 transition-all cursor-pointer group"
+              >
                 <div className="flex items-start justify-between mb-2">
-                  <p className="text-white font-medium text-sm">{rec.name || rec.assetType}</p>
+                  <p className="text-white font-medium text-sm group-hover:text-emerald-400 transition-colors">
+                    {rec.name || rec.assetType}
+                  </p>
                   <span className={`badge text-xs ${rec.risk === 'Low' ? 'risk-low border' : rec.risk === 'High' ? 'risk-high border' : 'risk-medium border'}`}>
                     {rec.risk || 'Medium'}
                   </span>
                 </div>
-                <p className="text-emerald-400 font-bold">{formatPercent(rec.expectedReturn || rec.expectedReturns)}</p>
-                <p className="text-gray-500 text-xs mt-0.5">Expected return</p>
-                {rec.allocation && (
-                  <p className="text-gray-400 text-xs mt-2">Allocation: {rec.allocation}%</p>
-                )}
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <p className="text-emerald-400 font-bold">{formatPercent(rec.expectedReturn || rec.expectedReturns)}</p>
+                    <p className="text-gray-500 text-xs mt-0.5">Expected return</p>
+                  </div>
+                  {rec.allocation && (
+                    <div className="text-right">
+                      <p className="text-gray-300 font-semibold text-xs">{rec.allocation}%</p>
+                      <p className="text-gray-500 text-[10px]">Allocation</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-1 text-[11px] text-emerald-400/80 font-medium mt-2 pt-2 border-t border-gray-800/60 group-hover:text-emerald-400">
+                  <span>Explore Plan</span>
+                  <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </div>
               </div>
             ))}
           </div>
