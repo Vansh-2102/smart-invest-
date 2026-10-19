@@ -65,7 +65,7 @@ graph TD
     subgraph AI / ML Microservice
         ML["Python FastAPI AI Engine (Port 8000)"]
         XGB["XGBoost Risk Classifier"]
-        GROQ["Groq LLM (llama-3.3-70b-versatile)"]
+        GROQ["Groq LLM (gpt-oss-120b)"]
         DDG["DuckDuckGo Search Engine (DDGS)"]
         ROBERTA["DistilRoBERTa News Sentiment"]
         YF["yfinance & CoinGecko Market Feeds"]
