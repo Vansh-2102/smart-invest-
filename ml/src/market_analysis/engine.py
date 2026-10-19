@@ -606,8 +606,49 @@ class MarketAnalysisEngine:
             if entry_date <= target_date:
                 return self._parse_nav_entry(entry)
         return None
+
+    def _fetch_ticker_sentiment(self, ticker: str) -> float:
+        """Extracts breaking news sentiment score mapped to [-1.0, 1.0]"""
+        try:
+            stock = yf.Ticker(ticker)
+            news = stock.news or []
+            titles = [n.get("title") for n in news if n.get("title")]
+            if not titles:
+                return 0.0
+
+            try:
+                from ..news_sentiment import NewsSentimentAnalyzer
+                analyzer = NewsSentimentAnalyzer()
+                analyses = analyzer.analyze_batch(titles[:5])
+                agg = analyzer.aggregate_sentiment(analyses)
+                if agg.get("overall_sentiment") == "positive":
+                    return round(float(agg.get("average_scores", {}).get("positive", 0.5)), 4)
+                elif agg.get("overall_sentiment") == "negative":
+                    return round(-float(agg.get("average_scores", {}).get("negative", 0.5)), 4)
+                return 0.0
+            except Exception:
+                # Resilient fallback lexical financial sentiment scorer
+                pos_words = {"surge", "jump", "gain", "growth", "profit", "rise", "record", "bull", "upgrade", "high", "beat"}
+                neg_words = {"drop", "fall", "plunge", "loss", "bear", "crash", "downgrade", "low", "miss", "probe", "cut", "warning"}
+                score = 0.0
+                eval_count = min(len(titles), 5)
+                for t in titles[:eval_count]:
+                    tokens = set(t.lower().replace(",", " ").replace(".", " ").split())
+                    pos_hits = len(tokens & pos_words)
+                    neg_hits = len(tokens & neg_words)
+                    if pos_hits > neg_hits:
+                        score += 0.4
+                    elif neg_hits > pos_hits:
+                        score -= 0.4
+                return max(-1.0, min(1.0, round(score / max(1, eval_count), 4)))
+        except Exception:
+            return 0.0
+
+    def get_confirmed_signal(self, ticker: str, price_data, sentiment_score: Optional[float] = None) -> Dict:
+        """Member method delegating to get_confirmed_signal"""
+        return get_confirmed_signal(ticker, price_data, sentiment_score)
     
-    def analyze_ticker(self, ticker: str, period: str = '1y') -> Dict:
+    def analyze_ticker(self, ticker: str, period: str = '1y', sentiment_score: Optional[float] = None) -> Dict:
         if not ticker.endswith(".NS"):
             ticker = f"{ticker}.NS"
         
@@ -651,9 +692,176 @@ class MarketAnalysisEngine:
             elif indicators['MACD'] < indicators['Signal_Line']:
                 signals.append({'indicator': 'MACD', 'signal': 'bearish_crossover', 'value': indicators['MACD']})
         
+        # If sentiment_score not explicitly provided, fetch live breaking news sentiment
+        if sentiment_score is None:
+            sentiment_score = self._fetch_ticker_sentiment(ticker)
+        
+        # Calculate composite signal & confirmation rules
+        confirmed = get_confirmed_signal(ticker, hist, sentiment_score)
+        
         return {
             'ticker': ticker,
             'indicators': indicators,
             'signals': signals,
+            'technical_signal': confirmed['technical_signal'],
+            'sentiment_score': confirmed['sentiment_score'],
+            'composite_score': confirmed['composite_score'],
+            'final_confirmed_signal': confirmed['final_confirmed_signal'],
+            'divergence_warning': confirmed['divergence_warning'],
+            'confirmed_signal_details': confirmed,
             'last_updated': hist.index[-1].isoformat()
         }
+
+
+def get_confirmed_signal(ticker: str, price_data, sentiment_score: Optional[float] = None) -> Dict:
+    """
+    Composite Scoring and Signal Confirmation Filter.
+    Modulates technical indicators (RSI, MACD) with breaking financial news sentiment.
+    
+    1. Normalizes RSI (14) momentum to [-1.0, 1.0]: tech_score = (rsi - 50) / 50
+    2. Maps sentiment label/score to [-1.0, 1.0]: Positive = +confidence, Negative = -confidence, Neutral = 0.0
+    3. Calculates composite signal: composite_score = 0.6 * tech_score + 0.4 * sentiment_score
+    4. Confirmation Rules:
+       - Technical BUY & sentiment <= -0.30: Downgrade to "HOLD / CAUTION: Bearish News Headwind", divergence_warning = True
+       - Technical BUY & sentiment >= 0.25: Upgrade to "STRONG BUY: Confirmed by Bullish Sentiment", divergence_warning = False
+       - Technical SELL (RSI > 70) & sentiment >= 0.40: Mark as "HOLD / OVERBOUGHT: Positive Momentum Breakout", divergence_warning = True
+    """
+    rsi = 50.0
+    macd = 0.0
+    signal_line = 0.0
+
+    if isinstance(price_data, pd.DataFrame):
+        df = price_data.copy()
+        if 'RSI' not in df.columns and 'Close' in df.columns:
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+        if ('MACD' not in df.columns or 'Signal_Line' not in df.columns) and 'Close' in df.columns:
+            ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+            ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+            macd_series = ema12 - ema26
+            df['MACD'] = macd_series
+            df['Signal_Line'] = macd_series.ewm(span=9, adjust=False).mean()
+            
+        if not df.empty:
+            latest = df.iloc[-1]
+            rsi = float(latest.get('RSI', 50.0))
+            macd = float(latest.get('MACD', 0.0))
+            signal_line = float(latest.get('Signal_Line', 0.0))
+    elif isinstance(price_data, dict):
+        rsi = float(price_data.get('RSI', price_data.get('rsi', 50.0)))
+        macd = float(price_data.get('MACD', price_data.get('macd', 0.0)))
+        signal_line = float(price_data.get('Signal_Line', price_data.get('signal_line', 0.0)))
+    elif isinstance(price_data, (int, float)):
+        rsi = float(price_data)
+
+    if np.isnan(rsi):
+        rsi = 50.0
+    if np.isnan(macd):
+        macd = 0.0
+    if np.isnan(signal_line):
+        signal_line = 0.0
+
+    # 1. Normalize RSI (14) momentum to a scale of [-1.0, 1.0]:
+    # tech_score = (rsi - 50) / 50
+    tech_score = (rsi - 50.0) / 50.0
+    tech_score = max(-1.0, min(1.0, tech_score))
+
+    # 2. Map sentiment label/score to [-1.0, 1.0]:
+    # Positive = +confidence, Negative = -confidence, Neutral = 0.0
+    if isinstance(sentiment_score, dict):
+        label = str(sentiment_score.get('sentiment', sentiment_score.get('label', 'neutral'))).lower()
+        conf = float(sentiment_score.get('confidence', sentiment_score.get('score', 0.0)))
+        if 'pos' in label:
+            mapped_sentiment = conf
+        elif 'neg' in label:
+            mapped_sentiment = -conf
+        else:
+            mapped_sentiment = 0.0
+    elif isinstance(sentiment_score, str):
+        s_lower = sentiment_score.lower()
+        if 'pos' in s_lower:
+            mapped_sentiment = 0.5
+        elif 'neg' in s_lower:
+            mapped_sentiment = -0.5
+        else:
+            mapped_sentiment = 0.0
+    else:
+        mapped_sentiment = float(sentiment_score) if sentiment_score is not None else 0.0
+
+    mapped_sentiment = max(-1.0, min(1.0, mapped_sentiment))
+
+    # 3. Calculate composite signal:
+    # composite_score = 0.6 * tech_score + 0.4 * sentiment_score
+    composite_score = round(0.6 * tech_score + 0.4 * mapped_sentiment, 4)
+
+    # Determine technical signal trigger
+    is_oversold = rsi < 30.0
+    is_overbought = rsi > 70.0
+    has_macd = (macd != 0.0 or signal_line != 0.0)
+    is_macd_bullish = has_macd and (macd > signal_line)
+    is_macd_bearish = has_macd and (macd < signal_line)
+
+    if is_oversold or is_macd_bullish or (tech_score > 0.3 and not is_overbought and not is_macd_bearish):
+        technical_signal = "BUY"
+    elif is_overbought or is_macd_bearish or (tech_score < -0.3 and not is_oversold and not is_macd_bullish):
+        technical_signal = "SELL"
+    else:
+        technical_signal = "HOLD"
+
+    divergence_warning = False
+
+    # 4. Concrete confirmation rules:
+    # If technical indicator triggers BUY but sentiment_score <= -0.30:
+    # Downgrade to "HOLD / CAUTION: Bearish News Headwind", divergence_warning = True
+    if technical_signal == "BUY" and mapped_sentiment <= -0.30:
+        final_confirmed_signal = "HOLD / CAUTION: Bearish News Headwind"
+        divergence_warning = True
+
+    # If technical indicator triggers BUY and sentiment_score >= 0.25:
+    # Upgrade to "STRONG BUY: Confirmed by Bullish Sentiment"
+    elif technical_signal == "BUY" and mapped_sentiment >= 0.25:
+        final_confirmed_signal = "STRONG BUY: Confirmed by Bullish Sentiment"
+        divergence_warning = False
+
+    # If technical indicator triggers SELL (RSI > 70) but sentiment_score >= 0.40:
+    # Mark as "HOLD / OVERBOUGHT: Positive Momentum Breakout", divergence_warning = True
+    elif (technical_signal == "SELL" or is_overbought) and is_overbought and mapped_sentiment >= 0.40:
+        final_confirmed_signal = "HOLD / OVERBOUGHT: Positive Momentum Breakout"
+        divergence_warning = True
+
+    elif technical_signal == "BUY":
+        final_confirmed_signal = "BUY: Moderate Confirmation"
+        divergence_warning = False
+    elif technical_signal == "SELL" and mapped_sentiment <= -0.25:
+        final_confirmed_signal = "STRONG SELL: Confirmed by Bearish Sentiment"
+        divergence_warning = False
+    elif technical_signal == "SELL":
+        final_confirmed_signal = "SELL: Bearish Technical Momentum"
+        divergence_warning = False
+    else: # HOLD / NEUTRAL
+        if composite_score >= 0.35:
+            final_confirmed_signal = "MODERATE BUY: Positive Sentiment Tilt"
+        elif composite_score <= -0.35:
+            final_confirmed_signal = "MODERATE SELL: Bearish Sentiment Tilt"
+        else:
+            final_confirmed_signal = "HOLD / NEUTRAL"
+        divergence_warning = False
+
+    return {
+        "ticker": ticker,
+        "technical_signal": technical_signal,
+        "rsi": round(rsi, 2),
+        "tech_score": round(tech_score, 4),
+        "sentiment_score": round(mapped_sentiment, 4),
+        "composite_score": composite_score,
+        "final_confirmed_signal": final_confirmed_signal,
+        "divergence_warning": divergence_warning,
+        "is_oversold": is_oversold,
+        "is_overbought": is_overbought,
+        "macd_bullish": is_macd_bullish,
+        "macd_bearish": is_macd_bearish
+    }
+

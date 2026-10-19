@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException  # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware  # pyrefly: ignore [missing-import]
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 from pathlib import Path
 import sys
 import os
@@ -10,9 +10,10 @@ import traceback
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.risk_assessment import RiskAssessmentModel
-from src.investment_recommendation import InvestmentRecommendationEngine
-from src.market_analysis import MarketAnalysisEngine
+from src.investment_recommendation import InvestmentRecommendationEngine, calculate_post_tax_returns
+from src.market_analysis import MarketAnalysisEngine, get_confirmed_signal
 from src.chatbot import FinancialChatbot
+
 
 app = FastAPI(
     title="AI Investment Guidance Platform - ML API",
@@ -109,6 +110,22 @@ async def get_recommendations(request: InvestmentRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class TaxCalculationRequest(BaseModel):
+    equity_gain: Optional[float] = 0.0
+    crypto_gain: Optional[float] = 0.0
+    fd_gain: Optional[float] = 0.0
+    sgb_gain: Optional[float] = 0.0
+    bonds_gain: Optional[float] = 0.0
+
+@app.post("/api/investment/post-tax-calculate")
+async def post_tax_calculate(request: TaxCalculationRequest):
+    try:
+        result = calculate_post_tax_returns(request.model_dump())
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
@@ -121,15 +138,36 @@ async def chat(request: ChatRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+class ConfirmedSignalRequest(BaseModel):
+    ticker: str
+    rsi: Optional[float] = 50.0
+    macd: Optional[float] = 0.0
+    signal_line: Optional[float] = 0.0
+    sentiment_score: Optional[float] = 0.0
+
 @app.get("/api/market/analyze/{ticker}")
-async def analyze_market(ticker: str, period: str = "1y"):
+async def analyze_market(ticker: str, period: str = "1y", sentiment_score: Optional[float] = None):
     try:
-        result = market_analyzer.analyze_ticker(ticker, period)
+        result = market_analyzer.analyze_ticker(ticker, period, sentiment_score=sentiment_score)
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
         return {"success": True, "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/market/confirmed-signal")
+async def post_confirmed_signal(request: ConfirmedSignalRequest):
+    try:
+        price_data = {
+            "RSI": request.rsi,
+            "MACD": request.macd,
+            "Signal_Line": request.signal_line
+        }
+        result = get_confirmed_signal(request.ticker, price_data, request.sentiment_score)
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/market/stocks")
 async def get_top_stocks():

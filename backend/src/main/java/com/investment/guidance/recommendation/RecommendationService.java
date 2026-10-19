@@ -10,9 +10,11 @@ import com.investment.guidance.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
@@ -40,7 +42,28 @@ public class RecommendationService {
         recommendation.setTotalInvestmentAmount(request.getInvestmentAmount());
         recommendation.setAssetAllocations((Map<String, Object>) mlRecommendations.get("asset_class_allocations"));
         recommendation.setAssetRecommendations((List<Map<String, Object>>) mlRecommendations.get("recommendations"));
+        
+        if (mlRecommendations.containsKey("gross_projected_profit") && mlRecommendations.get("gross_projected_profit") != null) {
+            recommendation.setGrossProjectedProfit(new BigDecimal(mlRecommendations.get("gross_projected_profit").toString()));
+        }
+        if (mlRecommendations.containsKey("estimated_tax_liability") && mlRecommendations.get("estimated_tax_liability") != null) {
+            recommendation.setEstimatedTaxLiability(new BigDecimal(mlRecommendations.get("estimated_tax_liability").toString()));
+        }
+        if (mlRecommendations.containsKey("net_projected_profit") && mlRecommendations.get("net_projected_profit") != null) {
+            recommendation.setNetProjectedProfit(new BigDecimal(mlRecommendations.get("net_projected_profit").toString()));
+        }
+        if (mlRecommendations.containsKey("effective_tax_rate_pct") && mlRecommendations.get("effective_tax_rate_pct") != null) {
+            recommendation.setEffectiveTaxRatePct(new BigDecimal(mlRecommendations.get("effective_tax_rate_pct").toString()));
+        }
+        if (mlRecommendations.containsKey("dicgc_insurance_status") && mlRecommendations.get("dicgc_insurance_status") instanceof Map) {
+            recommendation.setDicgcInsuranceStatus((Map<String, Object>) mlRecommendations.get("dicgc_insurance_status"));
+        }
+        if (mlRecommendations.containsKey("tax_breakdown") && mlRecommendations.get("tax_breakdown") instanceof Map) {
+            recommendation.setTaxBreakdown((Map<String, Object>) mlRecommendations.get("tax_breakdown"));
+        }
+
         return repository.save(recommendation);
+
     }
 
     public List<Recommendation> getByUserId(UUID userId) {

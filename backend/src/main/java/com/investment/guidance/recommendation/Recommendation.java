@@ -39,7 +39,19 @@ public class Recommendation {
     @JdbcTypeCode(SqlTypes.JSON)
     private List<Map<String, Object>> assetRecommendations;
 
+    private BigDecimal grossProjectedProfit;
+    private BigDecimal estimatedTaxLiability;
+    private BigDecimal netProjectedProfit;
+    private BigDecimal effectiveTaxRatePct;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> dicgcInsuranceStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> taxBreakdown;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
 }

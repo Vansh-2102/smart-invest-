@@ -115,13 +115,19 @@ Please provide:
 
   // Calculate profit and scenario metrics
   const totalInvestment = current?.totalInvestmentAmount || 0;
-  const projectedProfit = current?.projectedAnnualProfit ?? assetRecs.reduce((sum, r) => {
+  const projectedProfit = current?.projectedAnnualProfit ?? current?.grossProjectedProfit ?? current?.gross_projected_profit ?? assetRecs.reduce((sum, r) => {
     const amt = r.allocation_amount ?? r.amount ?? 0;
     const ret = r.expected_return_percent ?? r.expectedReturn ?? r['1y_return_percent'] ?? 10;
     return sum + (r.projected_annual_profit ?? (amt * (ret / 100)));
   }, 0);
 
+  const netProfit = current?.netProjectedProfit ?? current?.net_projected_profit;
+  const taxLiability = current?.estimatedTaxLiability ?? current?.estimated_tax_liability;
+  const effectiveTaxRate = current?.effectiveTaxRatePct ?? current?.effective_tax_rate_pct;
+  const dicgcStatus = current?.dicgcInsuranceStatus ?? current?.dicgc_insurance_status;
+
   const expectedReturnPct = current?.expectedReturnPercent ?? (totalInvestment > 0 ? ((projectedProfit / totalInvestment) * 100) : 0);
+
 
   // Group by categories
   const categoriesMap = {};
@@ -278,8 +284,81 @@ Please provide:
                   </p>
                 </Card>
               </div>
+ 
+              {/* Statutory Post-Tax & Banking Safety Metrics */}
+              {netProfit != null && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Card className="bg-gradient-to-br from-teal-950/40 via-gray-900 to-gray-800 border-teal-500/30">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-teal-400 font-medium flex items-center gap-1">
+                        <Scale className="w-3.5 h-3.5" /> Net Post-Tax Earnings (Est.)
+                      </p>
+                      <span className="text-[10px] bg-teal-500/10 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/20">
+                        Post-Budget 2024 LTCG & TDS
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-teal-300 mt-2">
+                      +{formatCurrency(netProfit)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Estimated post-tax wealth after statutory deductions & exemptions
+                    </p>
+                  </Card>
+
+                  <Card className="bg-gradient-to-br from-amber-950/30 via-gray-900 to-gray-800 border-amber-500/20">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-amber-400 font-medium flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5" /> Statutory Tax Liability
+                      </p>
+                      <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        {effectiveTaxRate != null ? `${effectiveTaxRate}% Effective Rate` : 'Statutory Model'}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-300 mt-2">
+                      {taxLiability > 0 ? `-${formatCurrency(taxLiability)}` : '₹0 (Within Exemption)'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Equity LTCG (12.5% above ₹1.25L) & Bank FD TDS (10% above ₹40k)
+                    </p>
+                  </Card>
+                </div>
+              )}
+
+              {/* RBI DICGC Banking Safety Advisory Banner */}
+              {dicgcStatus && dicgcStatus.safety_advisory && (
+                <div className={`p-4 rounded-xl border flex items-start gap-3 ${
+                  dicgcStatus.uninsured_principal > 0
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                }`}>
+                  <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1 w-full">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-sm">RBI DICGC Banking Safety Safeguard</span>
+                      {dicgcStatus.dicgc_limit_exceeded && (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                          Multi-Bank Split Enforced
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-300 leading-relaxed">
+                      {dicgcStatus.safety_advisory}
+                    </p>
+                    {dicgcStatus.partner_bank_distribution?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1.5">
+                        {dicgcStatus.partner_bank_distribution.map((b, idx) => (
+                          <span key={idx} className="bg-gray-800/80 text-gray-300 px-2.5 py-1 rounded-md text-[11px] border border-gray-700/60">
+                            <span className="font-medium text-white">{b.bank}</span>: {formatCurrency(b.allocated_amount)} {b.is_fully_insured ? '✓ (100% Insured)' : '⚠ (Uninsured Portion)'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Asset Allocation & Category Performance */}
+
               <Card>
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                   <div>
