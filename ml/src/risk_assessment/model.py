@@ -263,11 +263,17 @@ class RiskAssessmentModel:
         
         drivers = []
         for feat_name, val in zip(self.feature_names, row_vals):
+            direction = "higher" if val > 0 else "lower"
+            feat_title = feat_name.replace('_', ' ').title()
             drivers.append({
                 "feature": feat_name,
                 "shap_value": round(float(val), 4),
                 "impact": "positive" if val > 0 else "negative",
-                "reason": f"{feat_name.replace('_', ' ').title()} {'increased' if val > 0 else 'decreased'} probability for {predicted_tier} tier by {abs(val):.2f}"
+                "reason": (
+                    f"Statistical correlation: {feat_title} historically correlates with "
+                    f"{direction} drawdown capacity in the {predicted_tier} profile "
+                    f"(marginal attribution: {val:.2f})."
+                )
             })
             
         drivers.sort(key=lambda d: abs(d["shap_value"]), reverse=True)
@@ -292,11 +298,29 @@ class RiskAssessmentModel:
         
         top_risk_drivers = self.explain_prediction(X, pred_idx)
         
+        # Hard investor suitability guardrails overriding XGBoost if necessary (Gap 4)
+        raw_dti = float(user_data.get('debt_to_income', 0.0))
+        dti = raw_dti / 100.0 if raw_dti > 1.0 else raw_dti
+        time_horizon = float(user_data.get('time_horizon', 10))
+
+        suitability_override = False
+        suitability_reason = None
+
+        if dti > 0.45 or time_horizon < 2:
+            suitability_override = True
+            suitability_reason = (
+                "Suitability Rule Triggered: High debt burden (>45%) or short horizon (<2 yrs) "
+                "mandates conservative capital protection."
+            )
+            predicted_label = "conservative"
+
         return {
             'risk_level': predicted_label,
             'confidence': float(max(prediction_proba[0])),
             'probabilities': probabilities,
-            'top_risk_drivers': top_risk_drivers
+            'top_risk_drivers': top_risk_drivers,
+            'suitability_override': suitability_override,
+            'suitability_reason': suitability_reason
         }
     
     def save_model(self, path: str):

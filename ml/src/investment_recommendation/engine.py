@@ -576,6 +576,8 @@ class InvestmentRecommendationEngine:
             'gold': category_splits.get('gold', 0)
         }
         
+        benchmarks = continuous_optimizer.get_benchmarks()
+
         return {
             'risk_level': effective_risk,
             'base_risk_level': norm_risk,
@@ -593,6 +595,7 @@ class InvestmentRecommendationEngine:
             'net_return_percent': round((tax_calculation['net_projected_profit'] / investment_amount) * 100.0, 2) if investment_amount > 0 else 0.0,
             'asset_class_allocations': chart_allocations,
             'category_summaries': category_summaries,
+            'benchmarks': benchmarks,
             'recommendations': recommendations
         }
 

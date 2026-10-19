@@ -137,6 +137,30 @@ async def get_portfolio_optimization(risk_tier: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class RebalanceConsentRequest(BaseModel):
+    consent_granted: bool
+    effective_tier: str
+    base_risk_tier: Optional[str] = "moderate"
+    investment_amount: Optional[float] = 100000.0
+
+@app.post("/api/investment/rebalance/consent")
+async def rebalance_consent(request: RebalanceConsentRequest):
+    try:
+        final_tier = request.effective_tier if request.consent_granted else (request.base_risk_tier or "moderate")
+        result = recommendation_engine.generate_recommendations(
+            final_tier,
+            request.investment_amount
+        )
+        return {
+            "success": True,
+            "consent_granted": request.consent_granted,
+            "effective_tier": final_tier,
+            "base_risk_tier": request.base_risk_tier,
+            "data": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class TaxCalculationRequest(BaseModel):
     equity_gain: Optional[float] = 0.0
     crypto_gain: Optional[float] = 0.0

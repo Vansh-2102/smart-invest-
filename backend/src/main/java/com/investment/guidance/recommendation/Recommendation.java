@@ -53,6 +53,9 @@ public class Recommendation {
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> volatilityDrift;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> benchmarks;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Shield, RefreshCw, ArrowRight, Info } from 'lucide-react';
+import { Shield, RefreshCw, ArrowRight, Info, Sparkles, TrendingUp, TrendingDown } from 'lucide-react';
 import { useFinancialProfile } from '../hooks/useFinancialProfile';
 import Card, { CardHeader } from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -104,6 +104,7 @@ export default function RiskAssessment() {
   const level    = profile?.predictedRiskLevel?.toUpperCase() || 'MODERATE';
   const config   = RISK_DESCRIPTIONS[level] || RISK_DESCRIPTIONS.MODERATE;
   const confidence = profile?.currentRiskConfidence || 0;
+  const topRiskDrivers = profile?.topRiskDrivers || profile?.top_risk_drivers;
 
   return (
     <div className="space-y-6 max-w-4xl animate-fade-in">
@@ -204,6 +205,53 @@ export default function RiskAssessment() {
               ))}
             </div>
           </Card>
+
+          {/* SHAP Feature Importance & Non-Causal Risk Drivers (Gap 4) */}
+          {topRiskDrivers && topRiskDrivers.length > 0 && (
+            <Card className="border-emerald-500/30 bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800">
+              <CardHeader
+                title="Model Explainability & Key Risk Drivers (SHAP)"
+                subtitle="Local statistical feature attribution from TreeExplainer with suitability guardrails"
+              />
+              <div className="space-y-3">
+                {topRiskDrivers.map((driver, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-xl bg-gray-800/40 border border-gray-700/60 flex items-start gap-3"
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                      driver.impact === 'positive'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {driver.impact === 'positive' ? (
+                        <TrendingUp className="w-4 h-4" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm text-white capitalize">
+                          {driver.feature?.replace(/_/g, ' ')}
+                        </span>
+                        <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${
+                          driver.impact === 'positive'
+                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
+                            : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                        }`}>
+                          SHAP: {driver.shap_value > 0 ? `+${driver.shap_value?.toFixed(2)}` : driver.shap_value?.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-300 mt-1 leading-relaxed">
+                        {driver.reason}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Recommendations */}
           {config && (

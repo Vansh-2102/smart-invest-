@@ -31,26 +31,37 @@ def check_volatility_drift(
 
     surge_pct = ((current_vix - BASELINE_VIX) / BASELINE_VIX) * 100.0
     drift_triggered = False
+    suggested_defensive_tier = normalized_base
 
     if current_vix >= VIX_THRESHOLD_HIGH or surge_pct > VIX_SURGE_PCT_THRESHOLD:
         drift_triggered = True
-        if normalized_base == "aggressive":
-            effective_tier = "moderate"
-        elif normalized_base == "moderate":
-            effective_tier = "conservative"
-        else:
-            effective_tier = "conservative"
+        suggested_defensive_tier = "moderate" if normalized_base == "aggressive" else "conservative"
 
-    advisory = (
-        f"High market volatility shock (VIX: {current_vix:.1f}) detected. "
-        f"Risk profile dynamically stepped down from {base_risk_tier} to {effective_tier} "
-        "to safeguard capital against systemic drawdown."
-    ) if drift_triggered else "Market volatility within normal range."
+    review_required = drift_triggered
+    user_consent_required = drift_triggered
+
+    if drift_triggered:
+        advisory_message = (
+            f"Market Volatility Trigger (VIX: {current_vix:.1f}): Elevated drawdown risk detected. "
+            "Would you like to temporarily step down to defensive allocations?"
+        )
+        advisory = (
+            f"High market volatility shock (VIX: {current_vix:.1f}) detected. "
+            f"Risk profile dynamically stepped down from {base_risk_tier} to {suggested_defensive_tier} "
+            "to safeguard capital against systemic drawdown."
+        )
+    else:
+        advisory_message = "Market volatility within normal range."
+        advisory = "Market volatility within normal range."
 
     return {
         "base_risk_tier": base_risk_tier,
-        "effective_risk_tier": effective_tier,
+        "suggested_defensive_tier": suggested_defensive_tier,
+        "effective_risk_tier": suggested_defensive_tier if drift_triggered else normalized_base,
         "current_vix": round(float(current_vix), 2),
+        "review_required": review_required,
+        "user_consent_required": user_consent_required,
         "drift_triggered": drift_triggered,
+        "advisory_message": advisory_message,
         "advisory": advisory
     }

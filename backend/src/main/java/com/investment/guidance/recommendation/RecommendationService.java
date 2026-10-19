@@ -64,6 +64,9 @@ public class RecommendationService {
         if (mlRecommendations.containsKey("volatility_drift") && mlRecommendations.get("volatility_drift") instanceof Map) {
             recommendation.setVolatilityDrift((Map<String, Object>) mlRecommendations.get("volatility_drift"));
         }
+        if (mlRecommendations.containsKey("benchmarks") && mlRecommendations.get("benchmarks") instanceof Map) {
+            recommendation.setBenchmarks((Map<String, Object>) mlRecommendations.get("benchmarks"));
+        }
 
         return repository.save(recommendation);
 

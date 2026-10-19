@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 class MarketAnalysisEngine:
     def __init__(self):
@@ -607,11 +607,20 @@ class MarketAnalysisEngine:
                 return self._parse_nav_entry(entry)
         return None
 
-    def _fetch_ticker_sentiment(self, ticker: str) -> float:
-        """Extracts breaking news sentiment score mapped to [-1.0, 1.0]"""
+    def filter_news_by_timestamp(self, news_items: List[Dict], candle_timestamp: Any) -> List[Dict]:
+        """
+        Prevents lookahead bias by discarding any news article published after candle_timestamp (Gap 3).
+        Supports timestamps as datetime, pd.Timestamp, int/float unix epoch, or ISO string.
+        """
+        return filter_news_by_timestamp(news_items, candle_timestamp)
+
+    def _fetch_ticker_sentiment(self, ticker: str, candle_timestamp: Optional[Any] = None) -> float:
+        """Extracts breaking news sentiment score mapped to [-1.0, 1.0], preventing lookahead bias"""
         try:
             stock = yf.Ticker(ticker)
             news = stock.news or []
+            if candle_timestamp is not None:
+                news = filter_news_by_timestamp(news, candle_timestamp)
             titles = [n.get("title") for n in news if n.get("title")]
             if not titles:
                 return 0.0
@@ -842,12 +851,9 @@ def get_confirmed_signal(ticker: str, price_data, sentiment_score: Optional[floa
         final_confirmed_signal = "SELL: Bearish Technical Momentum"
         divergence_warning = False
     else: # HOLD / NEUTRAL
-        if composite_score >= 0.35:
-            final_confirmed_signal = "MODERATE BUY: Positive Sentiment Tilt"
-        elif composite_score <= -0.35:
-            final_confirmed_signal = "MODERATE SELL: Bearish Sentiment Tilt"
-        else:
-            final_confirmed_signal = "HOLD / NEUTRAL"
+        # Asymmetric risk filter (Gap 3): Strong Bullish Sentiment by itself MUST NOT generate
+        # a BUY signal if RSI is neutral and MACD has no crossover.
+        final_confirmed_signal = "HOLD / NEUTRAL"
         divergence_warning = False
 
     return {
@@ -864,4 +870,35 @@ def get_confirmed_signal(ticker: str, price_data, sentiment_score: Optional[floa
         "macd_bullish": is_macd_bullish,
         "macd_bearish": is_macd_bearish
     }
+
+
+def filter_news_by_timestamp(news_items: List[Dict], candle_timestamp: Any) -> List[Dict]:
+    """
+    Prevents lookahead bias by discarding any news article published after candle_timestamp (Gap 3).
+    Supports timestamps as datetime, pd.Timestamp, int/float unix epoch, or ISO string.
+    """
+    if candle_timestamp is None:
+        return news_items
+    
+    if isinstance(candle_timestamp, (int, float)):
+        candle_ts = candle_timestamp / 1000.0 if candle_timestamp > 1e11 else float(candle_timestamp)
+    else:
+        candle_ts = pd.to_datetime(candle_timestamp).timestamp()
+
+    valid_news = []
+    for item in news_items:
+        pub = item.get("providerPublishTime") or item.get("published_at") or item.get("publish_time") or item.get("timestamp") or item.get("date")
+        if pub is None:
+            valid_news.append(item)
+            continue
+        
+        if isinstance(pub, (int, float)):
+            pub_ts = pub / 1000.0 if pub > 1e11 else float(pub)
+        else:
+            pub_ts = pd.to_datetime(pub).timestamp()
+            
+        if pub_ts <= candle_ts:
+            valid_news.append(item)
+            
+    return valid_news
 

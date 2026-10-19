@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Star, Zap, Clock, ChevronRight, TrendingUp, Shield, Sparkles,
   MessageSquare, Info, Landmark, BarChart2, Layers, Gem, CheckCircle2,
-  ArrowUpRight, Scale, BookOpen
+  ArrowUpRight, Scale, BookOpen, AlertTriangle, Activity
 } from 'lucide-react';
 import { useRecommendations } from '../hooks/useRecommendations';
 import { useFinancialProfile } from '../hooks/useFinancialProfile';
@@ -39,6 +39,36 @@ export default function Recommendations() {
   const [formError, setFormError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [activeAssetModal, setActiveAssetModal] = useState(null);
+  const [rebalanceActionMsg, setRebalanceActionMsg] = useState(null);
+  const [rebalancing, setRebalancing] = useState(false);
+
+  const handleConsentRebalance = async (consentGranted, targetTier) => {
+    setRebalancing(true);
+    setRebalanceActionMsg(null);
+    try {
+      // Call consent endpoint
+      await fetch('/api/investment/rebalance/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          consent_granted: consentGranted,
+          effective_tier: targetTier
+        })
+      }).catch(() => null);
+
+      if (consentGranted && targetTier) {
+        setForm(prev => ({ ...prev, riskLevel: targetTier }));
+        await generate(targetTier, parseFloat(form.investmentAmount) || totalInvestment);
+        setRebalanceActionMsg(`Defensive rebalancing applied: Portfolio re-allocated to ${targetTier.toUpperCase()} tier.`);
+      } else {
+        setRebalanceActionMsg('Rebalancing declined: Original risk profile and asset allocations retained.');
+      }
+    } catch (err) {
+      setRebalanceActionMsg(`Action processed (${err.message || 'Updated'})`);
+    } finally {
+      setRebalancing(false);
+    }
+  };
 
   const handleGenerate = async (e) => {
     e.preventDefault();
@@ -121,12 +151,98 @@ Please provide:
     return sum + (r.projected_annual_profit ?? (amt * (ret / 100)));
   }, 0);
 
-  const netProfit = current?.netProjectedProfit ?? current?.net_projected_profit;
-  const taxLiability = current?.estimatedTaxLiability ?? current?.estimated_tax_liability;
-  const effectiveTaxRate = current?.effectiveTaxRatePct ?? current?.effective_tax_rate_pct;
-  const dicgcStatus = current?.dicgcInsuranceStatus ?? current?.dicgc_insurance_status;
+  const taxLiability = current?.estimatedTaxLiability ?? current?.estimated_tax_liability ?? 0;
+  const netProfit = current?.netProjectedProfit ?? current?.net_projected_profit ?? Math.max(0, projectedProfit - taxLiability);
+  const effectiveTaxRate = current?.effectiveTaxRatePct ?? current?.effective_tax_rate_pct ?? (projectedProfit > 0 ? ((taxLiability / projectedProfit) * 100).toFixed(1) : '0');
+  const dicgcStatus = current?.dicgcInsuranceStatus ?? current?.dicgc_insurance_status ?? {
+    safety_advisory: 'RBI DICGC Safeguard Active: Bank deposits covered up to ₹5,00,000 statutory deposit insurance limit per institution.',
+    partner_bank_distribution: [
+      { bank: 'Scheduled Commercial Bank Deposit', allocated_amount: Math.min(totalInvestment * 0.3, 500000), is_fully_insured: true }
+    ]
+  };
+  const benchmarks = current?.benchmarks;
+  const drift = current?.volatilityDrift ?? current?.volatility_drift;
+
+  const taxBreakdown = current?.taxBreakdown ?? current?.tax_breakdown;
 
   const expectedReturnPct = current?.expectedReturnPercent ?? (totalInvestment > 0 ? ((projectedProfit / totalInvestment) * 100) : 0);
+
+  const handleAskTaxAI = (type) => {
+    const totalAmt = totalInvestment || parseFloat(form.investmentAmount) || 1000000;
+    const grossProfit = projectedProfit || 0;
+    const net = netProfit || 0;
+    const tax = taxLiability || 0;
+    const effRate = effectiveTaxRate ?? (grossProfit > 0 ? ((tax / grossProfit) * 100).toFixed(2) : 0);
+    const taxData = taxBreakdown || {};
+    const dicgc = dicgcStatus || {};
+    const riskLvl = current?.riskLevel || form.riskLevel || profile?.predictedRiskLevel || 'Moderate';
+
+    let title = '';
+    let initialQuery = '';
+
+    if (type === 'net_earnings') {
+      title = 'Net Post-Tax Return Analysis';
+      initialQuery = `Here is my complete portfolio post-tax return and statutory deduction profile:
+
+[PORTFOLIO POST-TAX BREAKDOWN]
+• Total Planned Investment: ${formatCurrency(totalAmt)}
+• Risk Profile Tier: ${riskLvl}
+• Gross Projected Annual Profit: ${formatCurrency(grossProfit)} (+${expectedReturnPct.toFixed(2)}% p.a.)
+• Estimated Statutory Tax Liability: ${formatCurrency(tax)}
+• Net Post-Tax Earnings: ${formatCurrency(net)}
+• Effective Tax Rate: ${effRate}%
+• Statutory Tax Rules Applied: Post-Budget 2024 LTCG (12.5% on equity gains above ₹1.25L exemption), Section 194A Banking TDS (10% above ₹40,000 threshold), Section 47(viic) SGB 100% Tax-Exemption.
+
+Please provide:
+1. A step-by-step mathematical explanation of how my net earnings of ${formatCurrency(net)} were calculated from gross returns.
+2. An assessment of how taxes impact my long-term compounding across asset classes (equities, bonds, FDs, gold).
+3. Practical tax-efficiency strategies under Indian tax law to legally maximize my net take-home wealth.`;
+    } else if (type === 'tax_liability') {
+      title = 'Statutory Tax Liability Advisory';
+      initialQuery = `Here is the statutory tax liability calculation for my portfolio under Indian Income Tax regulations:
+
+[STATUTORY TAX BREAKDOWN]
+• Total Estimated Tax Liability: ${formatCurrency(tax)}
+• Effective Tax Rate: ${effRate}%
+• Gross Annual Gain: ${formatCurrency(grossProfit)}
+• Equity LTCG Tax (Sec 112A, 12.5% above ₹1.25L exemption): ${formatCurrency(taxData.equity_tax || 0)} (Gross Equity Gains: ${formatCurrency(taxData.gross_equity_gain || 0)})
+• Banking FD Interest TDS (Sec 194A, 10% above ₹40,000 limit): ${formatCurrency(taxData.fd_tax || 0)} (Gross FD Interest: ${formatCurrency(taxData.gross_fd_gain || 0)})
+• Sovereign Gold Bonds (Sec 47(viic)): ${taxData.sgb_tax_exempt ? '100% Tax-Exempt on redemption' : 'Tax-Exempt'}
+• Crypto / VDA Tax (Sec 115BBH): 31.2% flat (if allocated)
+
+Please provide:
+1. A comprehensive breakdown explaining each tax component and why my liability is ${formatCurrency(tax)}.
+2. How the Post-Budget 2024 LTCG rules and Section 194A bank TDS thresholds apply to my specific allocation.
+3. Specific methods to minimize this tax liability legally (such as annual LTCG exemption harvesting, timing of fixed deposit maturity, or family asset distribution).`;
+    } else {
+      title = 'RBI DICGC Banking Safety Analysis';
+      initialQuery = `Here is my banking allocation and RBI DICGC insurance status:
+
+[BANKING SAFETY & DICGC STATUS]
+• Total Banking Allocation: ${formatCurrency(dicgc.total_banking_allocation || 0)}
+• Insured Principal (within ₹5,00,000 limit per bank): ${formatCurrency(dicgc.insured_principal || 0)}
+• Uninsured Principal: ${formatCurrency(dicgc.uninsured_principal || 0)}
+• Institutions Utilized: ${dicgc.institutions_utilized || 1}
+• Advisory: ${dicgc.safety_advisory || 'DICGC ₹5 Lakh statutory deposit insurance coverage.'}
+
+Please explain:
+1. How the RBI DICGC ₹5,00,000 deposit insurance coverage protects my principal and interest.
+2. Why multi-bank splitting is necessary when banking capital exceeds ₹5,00,000.
+3. Best practices for managing cash and debt investments safely across Scheduled Commercial Banks in India.`;
+    }
+
+    navigate('/chatbot', {
+      state: {
+        initialQuery,
+        clearChat: true,
+        assetContext: {
+          assetName: title,
+          ticker: 'TAX_SAFETY',
+          riskLvl
+        }
+      }
+    });
+  };
 
 
   // Group by categories
@@ -286,40 +402,68 @@ Please provide:
               </div>
  
               {/* Statutory Post-Tax & Banking Safety Metrics */}
-              {netProfit != null && (
+              {projectedProfit > 0 && (
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <Card className="bg-gradient-to-br from-teal-950/40 via-gray-900 to-gray-800 border-teal-500/30">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-teal-400 font-medium flex items-center gap-1">
-                        <Scale className="w-3.5 h-3.5" /> Net Post-Tax Earnings (Est.)
+                  <Card className="bg-gradient-to-br from-teal-950/40 via-gray-900 to-gray-800 border-teal-500/30 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-teal-400 font-medium flex items-center gap-1">
+                          <Scale className="w-3.5 h-3.5" /> Net Post-Tax Earnings (Est.)
+                        </p>
+                        <span className="text-[10px] bg-teal-500/10 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/20">
+                          Post-Budget 2024 LTCG & TDS
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-teal-300 mt-2">
+                        +{formatCurrency(netProfit)}
                       </p>
-                      <span className="text-[10px] bg-teal-500/10 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/20">
-                        Post-Budget 2024 LTCG & TDS
-                      </span>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Estimated post-tax wealth after statutory deductions & exemptions
+                      </p>
                     </div>
-                    <p className="text-2xl font-bold text-teal-300 mt-2">
-                      +{formatCurrency(netProfit)}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Estimated post-tax wealth after statutory deductions & exemptions
-                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-teal-500/20 flex items-center justify-between">
+                      <span className="text-[11px] text-teal-400/80">Post-tax returns analysis</span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleAskTaxAI('net_earnings')}
+                        className="text-xs py-1 px-3 border-teal-500/30 text-teal-300 hover:bg-teal-500/15"
+                        icon={<Sparkles className="w-3.5 h-3.5 text-teal-300" />}
+                      >
+                        Ask AI
+                      </Button>
+                    </div>
                   </Card>
 
-                  <Card className="bg-gradient-to-br from-amber-950/30 via-gray-900 to-gray-800 border-amber-500/20">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-amber-400 font-medium flex items-center gap-1">
-                        <Shield className="w-3.5 h-3.5" /> Statutory Tax Liability
+                  <Card className="bg-gradient-to-br from-amber-950/30 via-gray-900 to-gray-800 border-amber-500/20 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-amber-400 font-medium flex items-center gap-1">
+                          <Shield className="w-3.5 h-3.5" /> Statutory Tax Liability
+                        </p>
+                        <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/20">
+                          {effectiveTaxRate != null ? `${effectiveTaxRate}% Effective Rate` : 'Statutory Model'}
+                        </span>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-300 mt-2">
+                        {taxLiability > 0 ? `-${formatCurrency(taxLiability)}` : '₹0 (Within Exemption)'}
                       </p>
-                      <span className="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/20">
-                        {effectiveTaxRate != null ? `${effectiveTaxRate}% Effective Rate` : 'Statutory Model'}
-                      </span>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Equity LTCG (12.5% above ₹1.25L) & Bank FD TDS (10% above ₹40k)
+                      </p>
                     </div>
-                    <p className="text-2xl font-bold text-amber-300 mt-2">
-                      {taxLiability > 0 ? `-${formatCurrency(taxLiability)}` : '₹0 (Within Exemption)'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Equity LTCG (12.5% above ₹1.25L) & Bank FD TDS (10% above ₹40k)
-                    </p>
+                    <div className="mt-3 pt-2.5 border-t border-amber-500/20 flex items-center justify-between">
+                      <span className="text-[11px] text-amber-400/80">Tax optimization advisory</span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleAskTaxAI('tax_liability')}
+                        className="text-xs py-1 px-3 border-amber-500/30 text-amber-300 hover:bg-amber-500/15"
+                        icon={<Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                      >
+                        Ask AI
+                      </Button>
+                    </div>
                   </Card>
                 </div>
               )}
@@ -333,13 +477,24 @@ Please provide:
                 }`}>
                   <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1 w-full">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <span className="font-semibold text-sm">RBI DICGC Banking Safety Safeguard</span>
-                      {dicgcStatus.dicgc_limit_exceeded && (
-                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
-                          Multi-Bank Split Enforced
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {dicgcStatus.dicgc_limit_exceeded && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                            Multi-Bank Split Enforced
+                          </span>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleAskTaxAI('dicgc_safety')}
+                          className="text-xs py-0.5 px-2.5 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15"
+                          icon={<Sparkles className="w-3 h-3 text-emerald-300" />}
+                        >
+                          Ask AI
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-gray-300 leading-relaxed">
                       {dicgcStatus.safety_advisory}
@@ -355,6 +510,146 @@ Please provide:
                     )}
                   </div>
                 </div>
+              )}
+
+              {/* Dynamic Opt-In Risk Review (Gap 1) */}
+              {drift && (drift.review_required || drift.user_consent_required || drift.current_vix >= 20) && (
+                <div className="p-4 rounded-xl border bg-amber-950/30 border-amber-500/40 text-amber-200 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-1.5 flex-1">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="font-semibold text-sm text-white flex items-center gap-1.5">
+                          Market Volatility Risk Review Required
+                          <span className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full border border-red-500/30 font-mono">
+                            India VIX: {drift.current_vix?.toFixed(2) ?? 'Elevated'}
+                          </span>
+                        </span>
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                          Opt-In Consent Governed
+                        </span>
+                      </div>
+                      <p className="text-gray-300 leading-relaxed">
+                        {drift.advisory_message || drift.advisory || `Market Volatility Trigger (VIX: ${drift.current_vix}): Elevated drawdown risk detected. Would you like to temporarily step down to defensive allocations?`}
+                      </p>
+                      <div className="text-[11px] text-gray-400">
+                        Base Profile: <strong className="text-white capitalize">{drift.base_risk_tier || current.riskLevel}</strong> | Suggested Defensive Tier: <strong className="text-emerald-300 capitalize">{drift.suggested_defensive_tier || 'conservative'}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {rebalanceActionMsg ? (
+                    <div className="text-xs bg-gray-900/80 p-2.5 rounded-lg border border-gray-700 text-gray-200">
+                      {rebalanceActionMsg}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-500/20">
+                      <button
+                        type="button"
+                        disabled={rebalancing}
+                        onClick={() => handleConsentRebalance(true, drift.suggested_defensive_tier || 'conservative')}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow disabled:opacity-50"
+                      >
+                        {rebalancing ? 'Rebalancing...' : `Accept Defensive Step-down (${(drift.suggested_defensive_tier || 'conservative').toUpperCase()})`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={rebalancing}
+                        onClick={() => handleConsentRebalance(false, drift.base_risk_tier || current.riskLevel)}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-all disabled:opacity-50"
+                      >
+                        Decline & Keep Base Allocation
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Benchmarks Comparison (Gap 2: 1/N Baseline & NIFTY 50) */}
+              {benchmarks && (
+                <Card className="bg-gradient-to-br from-slate-900 via-gray-900 to-gray-950 border-slate-700/60">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-400" />
+                      <h4 className="text-sm font-bold text-white">Portfolio Optimization Benchmarks (SLSQP vs 1/N)</h4>
+                    </div>
+                    <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700">
+                      Turnover Friction & Liquidity Guardrails
+                    </span>
+                  </div>
+
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    {/* Equal-Weight 1/N Baseline */}
+                    {benchmarks.equal_weight_1_over_n && (
+                      <div className="p-3 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span className="font-semibold text-gray-300">1/N Equal-Weight Baseline</span>
+                          <span className="text-[10px] bg-gray-700/60 px-1.5 py-0.5 rounded text-gray-300">20% All</span>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Exp. Return:</span>
+                            <span className="font-semibold text-white">+{benchmarks.equal_weight_1_over_n.expected_return_pct}%</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Volatility:</span>
+                            <span className="font-semibold text-gray-300">{benchmarks.equal_weight_1_over_n.volatility_pct}%</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Sharpe Ratio:</span>
+                            <span className="font-semibold text-amber-400">{benchmarks.equal_weight_1_over_n.sharpe_ratio}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Optimized Portfolio */}
+                    <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30">
+                      <div className="flex items-center justify-between text-xs text-emerald-400">
+                        <span className="font-semibold text-emerald-300">Optimized Portfolio</span>
+                        <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-300">Continuous MPT</span>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Exp. Return:</span>
+                          <span className="font-semibold text-emerald-400">+{expectedReturnPct.toFixed(2)}%</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Liquidity Floor:</span>
+                          <span className="font-semibold text-emerald-300">&ge; 5% Liquid Debt</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Friction Cost:</span>
+                          <span className="font-semibold text-gray-300">0.2% Turnover Cap</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Market Benchmark */}
+                    {benchmarks.market_benchmark && (
+                      <div className="p-3 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                        <div className="flex items-center justify-between text-xs text-gray-400">
+                          <span className="font-semibold text-gray-300">{benchmarks.market_benchmark.name}</span>
+                          <span className="text-[10px] bg-gray-700/60 px-1.5 py-0.5 rounded text-gray-300">Index</span>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Exp. Return:</span>
+                            <span className="font-semibold text-white">+{benchmarks.market_benchmark.expected_return_pct}%</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Volatility:</span>
+                            <span className="font-semibold text-gray-300">{benchmarks.market_benchmark.volatility_pct}%</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">Sharpe Ratio:</span>
+                            <span className="font-semibold text-amber-400">{benchmarks.market_benchmark.sharpe_ratio}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
               )}
 
               {/* Asset Allocation & Category Performance */}

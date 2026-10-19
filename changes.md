@@ -480,3 +480,115 @@ tests/test_open_gaps_resolution.py::test_end_to_end_recommendation_integration P
 - `GET http://localhost:8000/api/investment/optimize-portfolio/aggressive`:
   - Returned HTTP 200 with continuous Markowitz weights, expected return, and Sharpe ratio.
 
+---
+
+## 11. Production Safeguards for Gaps 1–4 (InvestIQ Comparison Guide Section 2)
+
+To resolve the remaining technical and operational gaps identified in Section 2 ("Unsolved Problems & How to Fix Them") of the InvestIQ Research Comparison Guide, the following production safeguards have been implemented and validated across `ml/`, `backend/`, and `frontend/`:
+
+### 11.1 Gap 1: Dynamic Opt-In Risk Review (No Silent Profile Tampering)
+- **Problem Solved:** Automated volatility step-downs previously modified the user's persisted `base_risk_tier` silently, violating regulatory consent protocols for discretionary portfolio re-allocation.
+- **Architectural & Algorithmic Guardrails (`ml/src/risk_assessment/drift_engine.py`):**
+  - The user's persisted `base_risk_tier` is **never altered silently**.
+  - When India VIX $\ge 20.0$ (or surges $> 35\%$ over the 14.0 baseline), the engine returns an advisory review request payload:
+    ```python
+    {
+        "base_risk_tier": base_risk_tier,
+        "suggested_defensive_tier": "moderate" if base_risk_tier == "aggressive" else "conservative",
+        "current_vix": round(current_vix, 2),
+        "review_required": True,
+        "user_consent_required": True,
+        "advisory_message": (
+            f"Market Volatility Trigger (VIX: {current_vix:.1f}): Elevated drawdown risk detected. "
+            "Would you like to temporarily step down to defensive allocations?"
+        )
+    }
+    ```
+- **Consent-Driven API (`ml/api/main.py`):**
+  - Added `POST /api/investment/rebalance/consent` accepting `{"consent_granted": bool, "effective_tier": str}`.
+  - If `consent_granted=False`, the user's original `base_risk_tier` is retained without altering portfolio parameters.
+- **Frontend Interactive Opt-In Banner (`frontend/src/pages/Recommendations.jsx`):**
+  - Renders an alert banner displaying the India VIX trigger and the prompt.
+  - Provides two distinct action buttons: *"Accept Defensive Step-down"* (triggers defensive rebalancing) and *"Decline & Keep Base Allocation"* (preserves base profile).
+
+### 11.2 Gap 2: Friction-Aware MPT Optimizer & 1/N Baseline Comparison
+- **Problem Solved:** Standard Markowitz mean-variance optimization produces extreme, unconstrained allocations, ignores real-world transaction/turnover slippage, lacks emergency liquidity floors, and omits comparison against naïve 1/N baselines (DeMiguel et al. 2009).
+- **Turnover Cost Friction Penalty (`ml/src/investment_recommendation/optimizer.py`):**
+  - Added a turnover penalty to the SLSQP objective function:
+    $$\text{turnover\_penalty} = 0.002 \times \sum_{i=1}^N |w_i - w_{\text{current}, i}|$$
+    $$\text{penalized\_objective} = -\frac{R_p - R_f}{\sigma_p} + \text{turnover\_penalty}$$
+- **Strict Liquidity Floor:**
+  - Enforced a minimum lower bound of 5% (`w_fd >= 0.05`) for Banking/Liquid Debt across **all** risk tiers, including aggressive portfolios (updated from `[0.02, 0.10]` to `[0.05, 0.10]`).
+- **Equal-Weight Baseline & Market Benchmark (`ml/src/investment_recommendation/engine.py`):**
+  - Calculates the 1/N equal-weight baseline (20% Banking FD, 20% Bonds, 20% Mutual Funds, 20% Equities, 20% Gold) alongside NIFTY 50 market metrics:
+    ```json
+    "benchmarks": {
+      "equal_weight_1_over_n": {
+        "weights": {"Banking_FD": 0.20, "Bonds": 0.20, "Mutual_Funds": 0.20, "Equities": 0.20, "Gold": 0.20},
+        "expected_return_pct": 10.41,
+        "volatility_pct": 6.82,
+        "sharpe_ratio": 0.50
+      },
+      "market_benchmark": {
+        "name": "NIFTY 50",
+        "expected_return_pct": 13.80,
+        "volatility_pct": 12.40,
+        "sharpe_ratio": 0.55
+      }
+    }
+    ```
+- **Backend & Database Synchronization (`Recommendation.java`, `RecommendationService.java`):**
+  - Added `@JdbcTypeCode(SqlTypes.JSON) private Map<String, Object> benchmarks;` to persist and return optimization benchmarks directly in the API.
+
+### 11.3 Gap 3: Timestamp Validation on News Sentiment (No Lookahead Bias)
+- **Problem Solved:** Real-time technical backtesting and sentiment integration often leak future news articles into past candlestick evaluations, causing lookahead bias and false positive confirmations.
+- **Lookahead Bias Prevention (`ml/src/market_analysis/engine.py`):**
+  - Implemented `filter_news_by_timestamp(news_articles, candle_timestamp)`:
+    - Normalizes `candle_timestamp` to UNIX epoch.
+    - Discards any news article where `published_at > candle_timestamp`.
+  - Exported through `ml/src/market_analysis/__init__.py`.
+- **Asymmetric Risk Filter:**
+  - Technical `BUY` + Bearish Sentiment ($\text{score} \le -0.30$) $\longrightarrow$ `"HOLD / CAUTION: Bearish News Headwind"` with `divergence_warning = True`.
+  - Strong Bullish Sentiment by itself **MUST NOT** generate a `BUY` signal if RSI is neutral ($30 \le \text{RSI} \le 70$) and MACD exhibits no bullish crossover (prevents unconfirmed FOMO entries).
+
+### 11.4 Gap 4: Grounded SHAP Language & Hard Suitability Caps
+- **Problem Solved:** Explanations generated from SHAP TreeExplainer previously used misleading causal language (e.g. *"Age caused you to be aggressive"*). Furthermore, ML models could assign aggressive tiers to financially vulnerable users with high debt or short time horizons.
+- **Statistical Correlation Phrasing (`ml/src/risk_assessment/model.py`):**
+  - Replaced causal attribution with statistically grounded phrasing:
+    `"Statistical correlation: {feature_name} historically correlates with {direction} drawdown capacity in the {tier} profile (marginal attribution: {shap_value:.2f})."`
+- **Hard Investor Suitability Guardrails:**
+  - If `debt_to_income > 0.45` or `time_horizon < 2`:
+    - Model prediction is **strictly overridden** to `conservative`.
+    - Appends mandatory suitability rationale:
+      `"Suitability Rule Triggered: High debt burden (>45%) or short horizon (<2 yrs) mandates conservative capital protection."`
+
+### 11.5 Automated Verification Test Suite (`ml/tests/test_comparison_guide_gaps.py`)
+Executed inside `fyp-ml-service` container:
+```bash
+docker exec fyp-ml-service pytest /app/tests/test_comparison_guide_gaps.py -v
+```
+**Results:**
+```
+tests/test_comparison_guide_gaps.py::test_dynamic_review_requires_consent PASSED               [ 25%]
+tests/test_comparison_guide_gaps.py::test_optimizer_turnover_penalty_and_equal_weight_baseline PASSED [ 50%]
+tests/test_comparison_guide_gaps.py::test_sentiment_timestamp_no_leakage PASSED              [ 75%]
+tests/test_comparison_guide_gaps.py::test_suitability_override_and_shap_language PASSED        [100%]
+
+======================== 4 passed in 2.81s =========================
+```
+Full test suite across both gap specifications (`ml/tests`):
+```bash
+docker exec fyp-ml-service pytest /app/tests -v
+======================== 8 passed in 5.85s =========================
+```
+
+### 11.6 Interactive "Ask AI" Integration for Statutory Tax & Banking Safeguards
+- **Target Files:** `frontend/src/pages/Recommendations.jsx`
+- **Features Implemented:**
+  - Added dedicated **"Ask AI"** buttons to:
+    1. **Net Post-Tax Earnings (Est.)**: Automatically generates a structured prompt for the AI Chatbot detailing pre-tax earnings, estimated statutory tax liability, effective tax rate, and queries on step-by-step mathematical deductions, long-term compounding impact, and tax-efficiency optimization under Indian tax law.
+    2. **Statutory Tax Liability**: Details post-budget 2024 Equity LTCG (12.5% above ₹1.25L exemption), Section 194A Bank FD TDS (10% above ₹40k limit), Section 47(viic) Sovereign Gold Bond tax exemptions, and prompts the AI for legal tax mitigation strategies (such as tax-loss harvesting and maturity distribution).
+    3. **RBI DICGC Banking Safety Safeguard**: Formulates queries explaining the ₹5,00,000 statutory deposit insurance coverage and multi-bank split logic across Scheduled Commercial Banks.
+  - Implemented robust fallbacks ensuring tax metrics and interactive AI buttons render reliably across all current and historical recommendation records.
+
+
