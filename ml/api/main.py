@@ -9,8 +9,12 @@ import traceback
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.risk_assessment import RiskAssessmentModel
-from src.investment_recommendation import InvestmentRecommendationEngine, calculate_post_tax_returns
+from src.risk_assessment import RiskAssessmentModel, check_volatility_drift
+from src.investment_recommendation import (
+    InvestmentRecommendationEngine, 
+    calculate_post_tax_returns,
+    optimize_portfolio
+)
 from src.market_analysis import MarketAnalysisEngine, get_confirmed_signal
 from src.chatbot import FinancialChatbot
 
@@ -93,6 +97,8 @@ async def assess_risk(profile: UserRiskProfile):
         result = risk_model.predict(profile.model_dump())
         if "risk_level" in result:
             result["riskLevel"] = result["risk_level"].upper()
+        if "top_risk_drivers" not in result:
+            result["top_risk_drivers"] = []
         return {"success": True, "data": result}
     except Exception as e:
         print("Error in assess_risk:")
@@ -102,11 +108,32 @@ async def assess_risk(profile: UserRiskProfile):
 @app.post("/api/investment/recommend")
 async def get_recommendations(request: InvestmentRequest):
     try:
+        # Check for volatility drift prior to portfolio optimization (Paper 1)
+        drift_info = check_volatility_drift(request.risk_level)
+        effective_risk = drift_info["effective_risk_tier"]
+        
         result = recommendation_engine.generate_recommendations(
-            request.risk_level, 
+            effective_risk, 
             request.investment_amount
         )
+        result["volatility_drift"] = drift_info
+        result["base_risk_tier"] = request.risk_level
+        result["effective_risk_tier"] = effective_risk
         return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/market/volatility-drift")
+async def get_volatility_drift(risk_tier: str = "moderate"):
+    try:
+        return {"success": True, "data": check_volatility_drift(risk_tier)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/investment/optimize-portfolio/{risk_tier}")
+async def get_portfolio_optimization(risk_tier: str):
+    try:
+        return {"success": True, "data": optimize_portfolio(risk_tier)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

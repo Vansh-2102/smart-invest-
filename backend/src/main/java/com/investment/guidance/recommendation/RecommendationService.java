@@ -61,6 +61,9 @@ public class RecommendationService {
         if (mlRecommendations.containsKey("tax_breakdown") && mlRecommendations.get("tax_breakdown") instanceof Map) {
             recommendation.setTaxBreakdown((Map<String, Object>) mlRecommendations.get("tax_breakdown"));
         }
+        if (mlRecommendations.containsKey("volatility_drift") && mlRecommendations.get("volatility_drift") instanceof Map) {
+            recommendation.setVolatilityDrift((Map<String, Object>) mlRecommendations.get("volatility_drift"));
+        }
 
         return repository.save(recommendation);
 

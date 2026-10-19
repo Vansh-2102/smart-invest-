@@ -8,8 +8,13 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -37,6 +42,9 @@ public class FinancialProfile {
 
     private String predictedRiskLevel;
     private BigDecimal currentRiskConfidence;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<Map<String, Object>> topRiskDrivers;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

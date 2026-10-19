@@ -11,12 +11,13 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
+@SuppressWarnings({"null", "unchecked"})
 public class FinancialProfileService {
 
     private final FinancialProfileRepository repository;
@@ -62,6 +63,11 @@ public class FinancialProfileService {
             profile.setCurrentRiskConfidence(BigDecimal.valueOf(number.doubleValue()));
         }
 
+        Object drivers = riskAssessment.get("top_risk_drivers");
+        if (drivers instanceof List) {
+            profile.setTopRiskDrivers((List<Map<String, Object>>) drivers);
+        }
+
         profile = repository.save(profile);
 
         return toResponse(profile);
@@ -74,7 +80,7 @@ public class FinancialProfileService {
     }
 
     private FinancialProfileResponse toResponse(FinancialProfile profile) {
-        return new FinancialProfileResponse(
+        FinancialProfileResponse response = new FinancialProfileResponse(
                 profile.getId(),
                 profile.getAge(),
                 profile.getAnnualIncome(),
@@ -88,5 +94,7 @@ public class FinancialProfileService {
                 profile.getCreatedAt(),
                 profile.getUpdatedAt()
         );
+        response.setTopRiskDrivers(profile.getTopRiskDrivers());
+        return response;
     }
 }

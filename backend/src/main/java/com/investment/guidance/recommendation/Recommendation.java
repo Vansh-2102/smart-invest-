@@ -50,6 +50,9 @@ public class Recommendation {
     @JdbcTypeCode(SqlTypes.JSON)
     private Map<String, Object> taxBreakdown;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> volatilityDrift;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

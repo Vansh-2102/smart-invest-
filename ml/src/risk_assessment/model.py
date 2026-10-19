@@ -3,7 +3,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report
-from xgboost import XGBClassifier
+from xgboost import XGBClassifier  # pyrefly: ignore [missing-import]
+import shap  # pyrefly: ignore [missing-import]
 import joblib
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 class RiskAssessmentModel:
     def __init__(self, model_path: str = None):
         self.model = None
+        self.explainer = None
         self.scaler = StandardScaler()
         self.label_encoders = {}
         self.target_encoder = LabelEncoder()
@@ -241,6 +243,36 @@ class RiskAssessmentModel:
         
         return self.model
     
+    def explain_prediction(self, features_df_or_array, predicted_class_idx: int) -> list:
+        if self.explainer is None:
+            self.explainer = shap.TreeExplainer(self.model)
+        
+        shap_values = self.explainer.shap_values(features_df_or_array)
+        
+        # Handle multi-class shap output structures
+        if isinstance(shap_values, list):
+            row_vals = shap_values[predicted_class_idx][0]
+        elif hasattr(shap_values, 'ndim') and shap_values.ndim == 3:
+            row_vals = shap_values[0, :, predicted_class_idx]
+        elif hasattr(shap_values, 'ndim') and shap_values.ndim == 2:
+            row_vals = shap_values[0]
+        else:
+            row_vals = np.array(shap_values)[0]
+            
+        predicted_tier = self.target_encoder.classes_[predicted_class_idx]
+        
+        drivers = []
+        for feat_name, val in zip(self.feature_names, row_vals):
+            drivers.append({
+                "feature": feat_name,
+                "shap_value": round(float(val), 4),
+                "impact": "positive" if val > 0 else "negative",
+                "reason": f"{feat_name.replace('_', ' ').title()} {'increased' if val > 0 else 'decreased'} probability for {predicted_tier} tier by {abs(val):.2f}"
+            })
+            
+        drivers.sort(key=lambda d: abs(d["shap_value"]), reverse=True)
+        return drivers[:3]
+
     def predict(self, user_data: dict):
         df = pd.DataFrame([user_data])
         df_processed = self.preprocess_data(df, is_training=False)
@@ -251,16 +283,20 @@ class RiskAssessmentModel:
         
         # Exact mapping using the fitted target encoder
         predicted_label = self.target_encoder.inverse_transform(prediction)[0]
+        pred_idx = int(prediction[0])
         
         probabilities = {
             cls: float(prob)
             for cls, prob in zip(self.target_encoder.classes_, prediction_proba[0])
         }
         
+        top_risk_drivers = self.explain_prediction(X, pred_idx)
+        
         return {
             'risk_level': predicted_label,
             'confidence': float(max(prediction_proba[0])),
-            'probabilities': probabilities
+            'probabilities': probabilities,
+            'top_risk_drivers': top_risk_drivers
         }
     
     def save_model(self, path: str):

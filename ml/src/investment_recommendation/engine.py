@@ -1,7 +1,17 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 import yfinance as yf
+
+try:
+    from .optimizer import continuous_optimizer, optimize_portfolio
+except ImportError:
+    from src.investment_recommendation.optimizer import continuous_optimizer, optimize_portfolio
+
+try:
+    from ..risk_assessment.drift_engine import check_volatility_drift
+except (ImportError, ValueError):
+    from src.risk_assessment.drift_engine import check_volatility_drift
 
 class InvestmentRecommendationEngine:
     def __init__(self):
@@ -317,31 +327,36 @@ class InvestmentRecommendationEngine:
         }
     
     def get_category_allocations(self, risk_level: str) -> Dict[str, float]:
-        """Returns realistic asset class allocation percentages (summing to 100%)"""
-        allocations = {
-            'conservative': {
-                'banking': 45.0,      # Fixed Deposits & Bank Savings
-                'bonds': 15.0,        # Sovereign & Debt Bonds
-                'stocks': 15.0,       # Defensive Blue-Chip Stocks
-                'mutual_funds': 15.0, # Large-Cap Index Funds
-                'gold': 10.0          # Gold / Sovereign Gold Bonds
-            },
-            'moderate': {
-                'banking': 20.0,      # Fixed Deposits
-                'bonds': 10.0,        # Debt Funds
-                'stocks': 35.0,       # Core Equities (Blue-chips & Leaders)
-                'mutual_funds': 25.0, # Broad Index ETFs (S&P 500 / Nasdaq)
-                'gold': 10.0          # Gold Hedge
-            },
-            'aggressive': {
-                'banking': 5.0,       # Emergency Cash
-                'bonds': 5.0,         # Short-Term Yield
-                'stocks': 55.0,       # High-Growth & Tech Stocks
-                'mutual_funds': 30.0, # Sectoral & Innovation ETFs (Semiconductors / Tech)
-                'gold': 5.0           # Tactical Gold
+        """Returns dynamic continuous asset class allocations via SciPy SLSQP (Paper 7)"""
+        norm_risk = risk_level.lower().strip()
+        try:
+            return continuous_optimizer.get_category_allocations(norm_risk)
+        except Exception as e:
+            print(f"Warning in continuous optimizer: {e}. Falling back to default bands.")
+            allocations = {
+                'conservative': {
+                    'banking': 45.0,
+                    'bonds': 25.0,
+                    'stocks': 5.0,
+                    'mutual_funds': 15.0,
+                    'gold': 10.0
+                },
+                'moderate': {
+                    'banking': 20.0,
+                    'bonds': 15.0,
+                    'stocks': 25.0,
+                    'mutual_funds': 30.0,
+                    'gold': 10.0
+                },
+                'aggressive': {
+                    'banking': 5.0,
+                    'bonds': 5.0,
+                    'stocks': 50.0,
+                    'mutual_funds': 35.0,
+                    'gold': 5.0
+                }
             }
-        }
-        return allocations.get(risk_level.lower(), allocations['moderate'])
+            return allocations.get(norm_risk, allocations['moderate'])
     
     def fetch_live_market_data(self, tickers: List[str]) -> Dict[str, Dict]:
         """Fetches live quotes for tradable tickers with graceful fallback"""
@@ -369,13 +384,17 @@ class InvestmentRecommendationEngine:
         """Member method delegating to calculate_post_tax_returns"""
         return calculate_post_tax_returns(allocations)
     
-    def generate_recommendations(self, risk_level: str, investment_amount: float = 100000) -> Dict:
+    def generate_recommendations(self, risk_level: str, investment_amount: float = 100000, vix_override: Optional[float] = None) -> Dict:
         norm_risk = risk_level.lower().strip()
         if norm_risk not in self.asset_catalog:
             norm_risk = 'moderate'
             
-        category_splits = self.get_category_allocations(norm_risk)
-        catalog = self.asset_catalog[norm_risk]
+        # Volatility Drift Engine (Paper 1)
+        drift_info = check_volatility_drift(norm_risk, current_vix=vix_override)
+        effective_risk = drift_info["effective_risk_tier"]
+        
+        category_splits = self.get_category_allocations(effective_risk)
+        catalog = self.asset_catalog[effective_risk]
         
         # Collect tickers to fetch live market data
         tradable_tickers = [
@@ -558,7 +577,10 @@ class InvestmentRecommendationEngine:
         }
         
         return {
-            'risk_level': norm_risk,
+            'risk_level': effective_risk,
+            'base_risk_level': norm_risk,
+            'effective_risk_level': effective_risk,
+            'volatility_drift': drift_info,
             'total_investment': investment_amount,
             'gross_projected_profit': tax_calculation['gross_projected_profit'],
             'estimated_tax_liability': tax_calculation['estimated_tax_liability'],

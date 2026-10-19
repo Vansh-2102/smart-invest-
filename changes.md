@@ -10,6 +10,10 @@ This document details the architectural, mathematical, and algorithmic upgrades 
 | :--- | :--- | :--- | :--- |
 | **Module 1: Real-Time Signal & Sentiment Filter** | Technical analysis and FinBERT/DistilRoBERTa news sentiment operated as disconnected silos without algorithmic confirmation or bull-trap filtering. | **RESOLVED & VERIFIED** | `ml/src/market_analysis/engine.py`<br>`ml/src/market_analysis/__init__.py`<br>`ml/api/main.py` |
 | **Module 2: Statutory Tax & Banking Safety Engine** | Projected profits were strictly gross earnings without Indian tax deductions (Post-Budget 2024 LTCG, Sec 115BBH, TDS) or RBI DICGC bank deposit safeguards. | **RESOLVED & VERIFIED** | `ml/src/investment_recommendation/engine.py`<br>`ml/src/investment_recommendation/__init__.py`<br>`ml/api/main.py`<br>`backend/.../Recommendation.java`<br>`backend/.../RecommendationService.java`<br>`frontend/src/pages/Recommendations.jsx` |
+| **Gap 1: SHAP Explainability for XGBoost (Paper 20)** | Black-box risk tier classifications lacked local feature attribution and human-interpretable rationale for why users were assigned to conservative, moderate, or aggressive tiers. | **RESOLVED & VERIFIED** | `ml/src/risk_assessment/model.py`<br>`ml/api/main.py`<br>`backend/.../FinancialProfile.java`<br>`backend/.../FinancialProfileService.java` |
+| **Gap 2: Continuous Markowitz SLSQP Optimizer (Paper 7)** | Static empirical allocation bands failed to continuously optimize the risk-return frontier (Sharpe ratio) under dynamic regulatory bounds. | **RESOLVED & VERIFIED** | `ml/src/investment_recommendation/optimizer.py`<br>`ml/src/investment_recommendation/engine.py`<br>`ml/src/investment_recommendation/__init__.py`<br>`ml/api/main.py` |
+| **Gap 3: Dynamic Market Volatility Drift Engine (Paper 1)** | Static risk profiling neglected macro systemic market volatility shocks, leaving aggressive and moderate portfolios exposed during market drawdowns. | **RESOLVED & VERIFIED** | `ml/src/risk_assessment/drift_engine.py`<br>`ml/src/risk_assessment/__init__.py`<br>`ml/src/investment_recommendation/engine.py`<br>`ml/api/main.py`<br>`backend/.../Recommendation.java`<br>`backend/.../RecommendationService.java` |
+
 
 ---
 
@@ -236,3 +240,243 @@ The recommendations endpoint (`/api/investment/recommend`) and engine now return
 - `POST /api/market/confirmed-signal`: Returned HTTP 200 with `composite_score`, `final_confirmed_signal`, and `divergence_warning`.
 - `POST /api/investment/recommend`: Returned HTTP 200 with `gross_projected_profit`, `estimated_tax_liability`, `net_projected_profit`, `effective_tax_rate_pct`, and `dicgc_insurance_status`.
 - `POST /api/investment/post-tax-calculate`: Returned HTTP 200 with granular statutory breakdown.
+
+---
+
+## 6. GAP 1: SHAP TreeExplainer Explainability for XGBoost Risk Engine (Paper 20)
+
+### 6.1 Problem Solved
+Previously, user risk profiling operated as an opaque "black-box" model. An `XGBClassifier` mapped demographic and financial traits (`age`, `income`, `investment_experience`, `risk_tolerance`, `investment_goal`, `time_horizon`, `debt_to_income`) directly to risk classes (`conservative`, `moderate`, `aggressive`) without surfacing the underlying causal factors. Users and regulatory audits could not determine which features drove the classification.
+
+### 6.2 Mathematical & Algorithmic Implementation
+1. **Shapley Value Formulation:**
+   Based on cooperative game theory, the Shapley value $\phi_i$ of feature $i$ represents its marginal contribution across all possible feature subsets $S \subseteq F \setminus \{i\}$:
+   $$\phi_i(x) = \sum_{S \subseteq F \setminus \{i\}} \frac{|S|!(|F| - |S| - 1)!}{|F|!} \left[ f(S \cup \{i\}) - f(S) \right]$$
+
+2. **SHAP TreeExplainer Integration:**
+   - In `ml/src/risk_assessment/model.py`, initialized and cached `shap.TreeExplainer(self.model)`.
+   - Extracted Shapley contributions for the predicted class index $k$:
+     $$\text{contributions} = \Phi[:, :, k]$$
+   - Paired each feature with its signed Shapley value:
+     - $\phi_i > 0 \implies \text{Positive impact (increased likelihood of assigned tier)}$
+     - $\phi_i < 0 \implies \text{Negative impact (decreased likelihood)}$
+   - Sorted features by absolute magnitude $|\phi_i|$ descending and selected the **top 3 drivers**.
+
+3. **Natural-Language Rationale Generation:**
+   ```python
+   {
+       "feature": feature_name,
+       "shap_value": round(float(val), 4),
+       "impact": "positive" if val > 0 else "negative",
+       "reason": f"{feature_name.replace('_', ' ').title()} {'increased' if val > 0 else 'decreased'} probability for {predicted_tier} tier by {abs(val):.2f}"
+   }
+   ```
+
+### 6.3 API Response Payload
+When requesting `POST /api/risk/assess`:
+```json
+{
+  "success": true,
+  "data": {
+    "risk_level": "aggressive",
+    "riskLevel": "AGGRESSIVE",
+    "confidence": 0.9877,
+    "probabilities": {
+      "aggressive": 0.9877,
+      "moderate": 0.0119,
+      "conservative": 0.0004
+    },
+    "top_risk_drivers": [
+      {
+        "feature": "risk_tolerance",
+        "shap_value": 1.7094,
+        "impact": "positive",
+        "reason": "Risk Tolerance increased probability for aggressive tier by 1.71"
+      },
+      {
+        "feature": "investment_goal",
+        "shap_value": 0.7938,
+        "impact": "positive",
+        "reason": "Investment Goal increased probability for aggressive tier by 0.79"
+      },
+      {
+        "feature": "age",
+        "shap_value": 0.7327,
+        "impact": "positive",
+        "reason": "Age increased probability for aggressive tier by 0.73"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 7. GAP 2: Continuous Markowitz SLSQP Numerical Portfolio Optimizer (Paper 7)
+
+### 7.1 Problem Solved
+Prior implementations utilized rigid, discrete allocation bands (e.g., hardcoded 45% FD, 15% Bonds, 15% Stocks, etc.). This approach failed to identify mathematically optimal points along the Modern Portfolio Theory (MPT) efficient frontier and could not dynamically adapt to market returns and asset class covariance structures.
+
+### 7.2 Mathematical Formulation
+
+1. **Objective Function:**
+   Maximize the portfolio Sharpe Ratio (solved by minimizing the negative Sharpe ratio):
+   $$\min_w \; -\frac{w^T \mu - R_f}{\sqrt{w^T \Sigma w}}$$
+   where:
+   - $w = [w_{\text{FD}}, w_{\text{Bonds}}, w_{\text{MF}}, w_{\text{Gold}}, w_{\text{Equities}}]^T \in \mathbb{R}^5$
+   - $\mu = [0.0725, 0.0680, 0.1250, 0.0950, 0.1600]^T$ represents annualized expected benchmark returns
+   - $R_f = 0.07$ (7.0% RBI benchmark risk-free rate)
+   - $\Sigma = D \cdot C \cdot D$ is the covariance matrix computed from asset class volatilities $D = \text{diag}(\sigma)$ and empirical cross-asset correlation matrix $C$:
+     $$C = \begin{bmatrix}
+     1.00 & 0.15 & 0.02 & 0.00 & 0.01 \\
+     0.15 & 1.00 & 0.20 & 0.05 & 0.15 \\
+     0.02 & 0.20 & 1.00 & -0.05 & 0.75 \\
+     0.00 & 0.05 & -0.05 & 1.00 & -0.10 \\
+     0.01 & 0.15 & 0.75 & -0.10 & 1.00
+     \end{bmatrix}$$
+
+2. **Constraints:**
+   - **Full Investment Budget Constraint:**
+     $$\sum_{i=1}^5 w_i = 1.0 \quad (100\% \text{ Allocation})$$
+   - **Risk-Tier Regulatory Guardrail Bounds:**
+     - **Conservative Tier:**
+       - Banking / FD: $[0.30, 0.60]$
+       - Bonds / Fixed Income: $[0.20, 0.40]$
+       - Mutual Funds / Large-Cap: $[0.10, 0.25]$
+       - Gold / SGB: $[0.05, 0.15]$
+       - Equities / Stocks: $[0.02, 0.10]$
+     - **Moderate Tier:**
+       - Banking / FD: $[0.10, 0.30]$
+       - Bonds / Fixed Income: $[0.10, 0.30]$
+       - Mutual Funds: $[0.20, 0.40]$
+       - Gold / SGB: $[0.05, 0.15]$
+       - Equities / Stocks: $[0.15, 0.35]$
+     - **Aggressive Tier:**
+       - Banking / FD: $[0.02, 0.10]$
+       - Bonds / Fixed Income: $[0.05, 0.20]$
+       - Mutual Funds: $[0.20, 0.40]$
+       - Gold / SGB: $[0.05, 0.20]$
+       - Equities / Stocks: $[0.30, 0.55]$
+
+3. **Numerical Solver Implementation (`scipy.optimize.minimize`):**
+   - Solver method: Sequential Least Squares Programming (`'SLSQP'`).
+   - Starting point $x_0$: Normalized midpoints of regulatory tier bounds.
+   - Robust Fallback: If numerical convergence fails or gradient vanishes, seamlessly falls back to empirical regulatory defaults.
+
+---
+
+## 8. GAP 3: Dynamic Market Volatility Drift Engine (Paper 1)
+
+### 8.1 Problem Solved
+Traditional risk assessment models generate a static profile at user onboarding. If macro systemic volatility spikes (e.g., global interest rate shocks, geopolitical conflict, credit events), an aggressive or moderate risk profile exposes the investor's capital to steep drawdowns without automatic defensive repositioning.
+
+### 8.2 Drift Detection & Shift Mechanism
+1. **Volatility Benchmark (India VIX):**
+   - Monitored ticker: `^INDIAVIX` via `yfinance`.
+   - Baseline historical VIX level: $\text{VIX}_{\text{base}} = 14.0$.
+   - Systemic Volatility Shock Condition:
+     $$\text{Current VIX} \ge 20.0 \quad \text{OR} \quad \frac{\text{Current VIX} - 14.0}{14.0} \times 100\% > 35.0\%$$
+
+2. **Dynamic Risk-Tier Step-Down:**
+   - If shock condition is triggered:
+     - $\text{Aggressive} \longrightarrow \text{Moderate}$ (reduces maximum equity cap from 55% to 35%, triples FD safety buffer)
+     - $\text{Moderate} \longrightarrow \text{Conservative}$ (reduces equity cap from 35% to 10%, raises banking capital up to 60%)
+     - $\text{Conservative} \longrightarrow \text{Conservative}$ (maintains defensive capital preservation anchor)
+     - `drift_triggered = True`
+
+3. **Investor Advisory Payload:**
+   ```python
+   {
+       "base_risk_tier": "aggressive",
+       "effective_risk_tier": "moderate",
+       "current_vix": 24.5,
+       "drift_triggered": True,
+       "advisory": "High market volatility shock (VIX: 24.5) detected. Risk profile dynamically stepped down from aggressive to moderate to safeguard capital against systemic drawdown."
+   }
+   ```
+
+4. **Integration with Recommendation Flow:**
+   In `/api/investment/recommend`, the drift engine checks current volatility prior to optimization. The portfolio optimizer dynamically allocates assets using the `effective_risk_tier`, while preserving the user's `base_risk_tier` for tracking and UI notifications.
+
+---
+
+## 9. Backend & Database Synchronization (Spring Boot & PostgreSQL)
+
+1. **Entity Updates:**
+   - In `Recommendation.java`:
+     - Added `@JdbcTypeCode(SqlTypes.JSON) private Map<String, Object> volatilityDrift;`
+   - In `FinancialProfile.java`:
+     - Added `@JdbcTypeCode(SqlTypes.JSON) private List<Map<String, Object>> topRiskDrivers;`
+   - In `FinancialProfileResponse.java`:
+     - Added `topRiskDrivers` field and constructor support.
+
+2. **Service Layer Updates:**
+   - In `RecommendationService.java`:
+     - Enriched persistence mapping to store `volatility_drift` inside the database record.
+   - In `FinancialProfileService.java`:
+     - Enriched risk profile handling to extract and persist `top_risk_drivers` from ML model predictions.
+
+3. **Compilation & Packaging:**
+   - Successfully compiled and packaged via `mvnw.cmd package -DskipTests`.
+   - Target JAR `guidance-1.0.0.jar` deployed into container `fyp-backend`.
+   - Verified clean boot on port 8081 with PostgreSQL JPA automatic schema update.
+
+---
+
+## 10. Automated Verification Test Suite & Live Evidence
+
+### 10.1 Pytest Suite (`ml/tests/test_open_gaps_resolution.py`)
+
+A comprehensive verification test suite was executed inside the production container `fyp-ml-service`:
+
+```bash
+docker exec fyp-ml-service pytest /app/tests/test_open_gaps_resolution.py -v
+```
+
+**Test Execution Results:**
+```
+tests/test_open_gaps_resolution.py::test_shap_explainability PASSED           [ 25%]
+tests/test_open_gaps_resolution.py::test_continuous_slsqp_optimizer PASSED    [ 50%]
+tests/test_open_gaps_resolution.py::test_volatility_drift_trigger PASSED      [ 75%]
+tests/test_open_gaps_resolution.py::test_end_to_end_recommendation_integration PASSED [100%]
+
+======================== 4 passed, 2 warnings in 3.04s =========================
+```
+
+**Assertion Verification Details:**
+1. `test_shap_explainability()`:
+   - Evaluated sample investor profile.
+   - Asserted `top_risk_drivers` has exactly 3 items.
+   - Verified each driver has non-null `feature`, numerical `shap_value`, categorical `impact` ("positive"/"negative"), and informative `reason`.
+   - Sample output:
+     - `risk_tolerance` (Shapley +1.6591): *"Risk Tolerance increased probability for aggressive tier by 1.66"*
+     - `age` (Shapley +0.6821): *"Age increased probability for aggressive tier by 0.68"*
+     - `investment_goal` (Shapley +0.5637): *"Investment Goal increased probability for aggressive tier by 0.56"*
+
+2. `test_continuous_slsqp_optimizer()`:
+   - Optimized all 3 risk tiers (`conservative`, `moderate`, `aggressive`).
+   - Verified continuous weights sum to $1.00 \pm 0.001$.
+   - Verified no asset class breaches its lower or upper regulatory bound.
+   - Verified expected annualized returns exceed the RBI benchmark risk-free rate of $7.0\%$:
+     - Conservative: Return = $8.88\%$, Volatility = $3.53\%$, Sharpe = $0.5335$
+     - Moderate: Return = $10.78\%$, Volatility = $7.00\%$, Sharpe = $0.5397$
+     - Aggressive: Return = $12.66\%$, Volatility = $10.44\%$, Sharpe = $0.5428$
+
+3. `test_volatility_drift_trigger()`:
+   - Elevated VIX Shock ($\text{VIX} = 24.5$): Asserted `aggressive` stepped down to `moderate`, and `moderate` stepped down to `conservative` with `drift_triggered = True`.
+   - Baseline Market ($\text{VIX} = 13.5$): Asserted risk tiers remain unchanged with `drift_triggered = False`.
+
+4. `test_end_to_end_recommendation_integration()`:
+   - Tested composite portfolio recommendation under high VIX shock.
+   - Confirmed simultaneous execution of Volatility Drift downshift, continuous SLSQP portfolio optimization, post-tax deductions (LTCG / 115BBH / TDS), and DICGC multi-bank splitting.
+
+### 10.2 Live HTTP API Verifications
+- `POST http://localhost:8000/api/risk/assess`:
+  - Returned HTTP 200 with `top_risk_drivers` and class probabilities.
+- `POST http://localhost:8000/api/investment/recommend`:
+  - Returned HTTP 200 with `base_risk_tier`, `effective_risk_tier`, `volatility_drift`, `asset_class_allocations`, post-tax metrics, and DICGC multi-bank distributions.
+- `GET http://localhost:8000/api/market/volatility-drift`:
+  - Returned HTTP 200 with live India VIX and current drift status.
+- `GET http://localhost:8000/api/investment/optimize-portfolio/aggressive`:
+  - Returned HTTP 200 with continuous Markowitz weights, expected return, and Sharpe ratio.
+
