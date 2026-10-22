@@ -95,6 +95,7 @@ async def root():
     }
 
 @app.get("/health")
+@app.get("/healthz")
 @app.get("/api/health")
 async def health_check():
     return {
