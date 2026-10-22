@@ -26,9 +26,12 @@ app = FastAPI(
 )
 
 # Add CORS middleware to allow requests from frontend
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allow frontend origin
+    allow_origins=["*"] if "*" in allowed_origins else allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
@@ -84,10 +87,21 @@ async def root():
     return {
         "message": "AI Investment Guidance Platform ML API",
         "endpoints": {
+            "health": "/health",
             "risk_assessment": "/api/risk/assess",
             "investment_recommendations": "/api/investment/recommend",
             "market_analysis": "/api/market/analyze/{ticker}"
         }
+    }
+
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    return {
+        "status": "UP",
+        "service": "investiq-ml-service",
+        "risk_model_loaded": risk_model is not None,
+        "chatbot_loaded": chatbot is not None
     }
 
 @app.post("/api/risk/assess")

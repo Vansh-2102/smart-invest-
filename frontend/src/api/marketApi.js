@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const ML_API_BASE = 'http://localhost:8000';
+const ML_API_BASE = import.meta.env.VITE_ML_API_URL 
+  ? import.meta.env.VITE_ML_API_URL.replace(/\/$/, '')
+  : 'http://localhost:8000';
 
 const mlApiClient = axios.create({
   baseURL: ML_API_BASE,
