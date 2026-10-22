@@ -29,9 +29,10 @@ wheels/
 # Models and data
 *.pkl
 *.joblib
+!models/
+!models/**
 *.h5
 *.pt
 *.pth
 data/raw/
 data/processed/
-models/

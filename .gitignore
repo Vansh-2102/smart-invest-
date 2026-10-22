@@ -31,6 +31,8 @@ ml/.cache/
 *.pyd
 .pytest_cache/
 *.joblib
+!ml/models/
+!ml/models/**
 *.zip
 ml/data/*.zip
 ml/data/*/*.zip
