@@ -82,21 +82,22 @@ class InvestmentRequest(BaseModel):
 class ChatRequest(BaseModel):
     query: str
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return {
         "message": "AI Investment Guidance Platform ML API",
         "endpoints": {
             "health": "/health",
+            "healthz": "/healthz",
             "risk_assessment": "/api/risk/assess",
             "investment_recommendations": "/api/investment/recommend",
             "market_analysis": "/api/market/analyze/{ticker}"
         }
     }
 
-@app.get("/health")
-@app.get("/healthz")
-@app.get("/api/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/healthz", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {
         "status": "UP",
