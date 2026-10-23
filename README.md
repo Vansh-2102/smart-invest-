@@ -7,6 +7,20 @@
 
 ---
 
+## 🌐 Live Deployed Application URLs
+
+| Service / Component | Hosting Platform | Environment | Live Production URL | Health Check / Documentation |
+| :--- | :--- | :---: | :--- | :---: |
+| **Frontend Web App** | **Vercel** | Production | **`https://smart-invest-.vercel.app`** | Active SPA UI |
+| **Backend REST API** | **Render** | Production | **`https://smart-invest-backend-z3gg.onrender.com`** | [`/healthz`](https://smart-invest-backend-z3gg.onrender.com/healthz) |
+| **ML & AI Engine** | **Render** | Production | **`https://smart-invest-ml.onrender.com`** | [`/healthz`](https://smart-invest-ml.onrender.com/healthz) \| [`/docs`](https://smart-invest-ml.onrender.com/docs) |
+| **Relational Database** | **Supabase** | Cloud (AWS) | `aws-0-ap-southeast-2.pooler.supabase.com` | PostgreSQL 17 (Pooler) |
+| **24/7 Keep-Alive Monitor** | **UptimeRobot** | Monitoring | Continuous 5-min ping on `/healthz` | 0% Downtime Heartbeat |
+
+> 📌 **Swagger / OpenAPI Documentation:** Explore and test the live ML microservice endpoints directly at **[https://smart-invest-ml.onrender.com/docs](https://smart-invest-ml.onrender.com/docs)**.
+
+---
+
 ## 🌟 Key Features & Core Working Mechanics
 
 ### 1. 📊 ML Risk Assessment Model
@@ -99,22 +113,33 @@ graph TD
 
 ## 🔌 API Endpoints Summary
 
-### ML Service Endpoints (`http://localhost:8000`)
+### ML Service Endpoints
+* **Production Base URL:** `https://smart-invest-ml.onrender.com`
+* **Local Base URL:** `http://localhost:8000`
+
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/risk/assess` | Evaluates user profile and predicts risk level via XGBoost |
-| `POST` | `/api/investment/recommend` | Generates MPT asset allocation portfolio & share quantities |
-| `POST` | `/api/chat` | AI Financial Advisor Chatbot (Groq LLM + DuckDuckGo Search) |
+| `GET` / `HEAD` | `/healthz` | Uptime keep-alive & service health heartbeat |
+| `POST` | `/api/risk/assess` | Evaluates user profile and predicts risk level via XGBoost with SHAP attribution |
+| `POST` | `/api/investment/recommend` | Friction-aware SLSQP continuous portfolio optimization & tax deductions |
+| `POST` | `/api/investment/rebalance/consent` | Opt-in consent handler for market volatility shock rebalancing |
+| `POST` | `/api/investment/post-tax-calculate` | Post-Budget 2024 LTCG, Sec 115BBH VDA & Sec 194A TDS calculations |
+| `POST` | `/api/market/confirmed-signal` | Composite RSI momentum + FinBERT sentiment confirmation filter |
+| `POST` | `/api/chat` | AI Financial Advisor Chatbot (Groq LPU LLaMA 3.3 70B + DuckDuckGo Search) |
 | `GET` | `/api/market/analyze/{ticker}` | Returns price history & technical indicators (MA, RSI, MACD) |
 | `GET` | `/api/market/stocks` | Top NSE Indian stock prices, P/E ratios, and market caps |
-| `GET` | `/api/market/indices` | Live global and domestic market index metrics |
+| `GET` | `/api/market/indices` | Live global and domestic market index metrics (NIFTY, SENSEX, India VIX) |
 | `GET` | `/api/market/gold` | Live spot gold price in INR/10g, SGB rates & ETF options |
-| `GET` | `/api/market/crypto` | Live crypto prices, 24h changes, and market caps in INR |
+| `GET` | `/api/market/crypto` | Live crypto prices (BTC, ETH, SOL, XRP, ADA) in INR with Yahoo Finance fallback |
 
-### Backend Service Endpoints (`http://localhost:8081`)
+### Backend Service Endpoints
+* **Production Base URL:** `https://smart-invest-backend-z3gg.onrender.com`
+* **Local Base URL:** `http://localhost:8081`
+
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | User registration & password hashing |
+| `GET` / `HEAD` | `/healthz` | Uptime keep-alive & service health heartbeat |
+| `POST` | `/api/auth/register` | User registration & BCrypt password hashing |
 | `POST` | `/api/auth/login` | Authentication & JWT token issuance |
 | `POST` | `/api/profile` | Create/Update financial profile & trigger ML risk scoring |
 | `POST` | `/api/recommendations` | Generate & persist user portfolio recommendations |
